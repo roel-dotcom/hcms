@@ -1,0 +1,449 @@
+################################################################################
+# HCMS Admin Dashboard
+# Full system visibility: all sensors, all helpers, all alarms.
+# Register in configuration.yaml:
+#   lovelace:
+#     dashboards:
+#       hcms-admin:
+#         mode: yaml
+#         title: HCMS Admin
+#         icon: mdi:shield-home
+#         filename: dashboards/hcms_admin_dashboard.yaml
+################################################################################
+
+title: HCMS Admin
+views:
+
+  ##############################################################################
+  # VIEW 1 — OVERVIEW
+  ##############################################################################
+
+  - title: Overview
+    icon: mdi:view-dashboard
+    path: overview
+    badges: []
+    cards:
+
+      # ── Prominent master switch ─────────────────────────────────────────────
+      - type: grid
+        columns: 2
+        square: false
+        cards:
+          - type: button
+            name: HCMS Master Switch
+            icon: mdi:home-automation
+            entity: input_boolean.hcms_enabled
+            show_state: true
+            tap_action:
+              action: toggle
+            hold_action:
+              action: more-info
+          - type: markdown
+            content: >
+              **Mode:** {{ states('sensor.hcms_climate_mode') }}
+
+              {{ states('sensor.hcms_climate_reason') }}
+
+      # ── Master switches ─────────────────────────────────────────────────────
+      - type: entities
+        title: Subsystem Switches
+        icon: mdi:toggle-switch
+        entities:
+          - entity: input_boolean.hcms_enabled
+            name: HCMS Master
+          - entity: input_boolean.hcms_screen_control
+            name: Screen Automation
+          - entity: input_boolean.hcms_airco_control
+            name: Airco Automation
+          - entity: input_boolean.hcms_ventilation_control
+            name: Ventilation Automation
+          - entity: input_boolean.hcms_holiday_mode
+            name: Holiday Mode
+          - entity: input_boolean.screens_manual_override
+            name: Screen Manual Override
+            secondary_info: last-changed
+
+      # ── Temperature overview ────────────────────────────────────────────────
+      - type: glance
+        title: Temperatures
+        columns: 3
+        entities:
+          - entity: sensor.hcms_indoor_temperature
+            name: Indoor (weighted)
+          - entity: sensor.ws3900a_temperature_1
+            name: Bedroom
+          - entity: sensor.ws3900a_temperature_2
+            name: Living
+          - entity: sensor.ws3900a_outdoor_temperature
+            name: Outdoor
+          - entity: sensor.hcms_temperature_error
+            name: Error vs Target
+          - entity: sensor.hcms_outdoor_delta
+            name: Outdoor Delta
+
+      # ── Key binary sensors ──────────────────────────────────────────────────
+      - type: glance
+        title: Conditions
+        columns: 4
+        entities:
+          - entity: binary_sensor.hcms_needs_cooling
+            name: Needs Cooling
+          - entity: binary_sensor.hcms_needs_heating
+            name: Needs Heating
+          - entity: binary_sensor.hcms_free_cooling_possible
+            name: Free Cooling
+          - entity: binary_sensor.hcms_solar_surplus
+            name: Solar Surplus
+          - entity: binary_sensor.hcms_strong_sun
+            name: Strong Sun
+          - entity: binary_sensor.hcms_sun_facing_windows
+            name: Sun on Windows
+          - entity: binary_sensor.hcms_night_flush_available
+            name: Night Flush
+          - entity: binary_sensor.hcms_rain_detected
+            name: Rain
+
+      # ── Device recommendations ──────────────────────────────────────────────
+      - type: glance
+        title: Recommendations & Permissions
+        columns: 3
+        entities:
+          - entity: sensor.hcms_screen_recommendation
+            name: Screen
+          - entity: sensor.hcms_cooling_priority
+            name: Cooling
+          - entity: binary_sensor.hcms_airco_permitted
+            name: Airco OK
+          - entity: binary_sensor.hcms_ventilation_permitted
+            name: Vent OK
+          - entity: binary_sensor.hcms_screens_permitted
+            name: Screens OK
+
+      # ── Actuator states ─────────────────────────────────────────────────────
+      - type: entities
+        title: Actuators — Current State
+        icon: mdi:electric-switch
+        entities:
+          - entity: cover.living_1
+            name: Screen Living 1
+          - entity: cover.living_2
+            name: Screen Living 2
+          - entity: cover.slaapkamer
+            name: Screen Bedroom
+          - type: divider
+          - entity: fan.none_vmb4ry_ventilatie_sp2_ventilatie_sp2
+            name: Ventilation Fan
+          - type: divider
+          - entity: fan.none_vmb4ry_airco_airco
+            name: Airco
+          - entity: fan.r4_stopcontacten_vmb4ryld_airco_vent_airco_vent
+            name: Duct Fan
+
+      # ── Quick script buttons ────────────────────────────────────────────────
+      - type: grid
+        title: Manual Script Triggers
+        columns: 2
+        square: false
+        cards:
+          - type: button
+            name: Screens Close
+            icon: mdi:window-shutter
+            tap_action:
+              action: perform-action
+              perform_action: script.hcms_screens_close
+          - type: button
+            name: Screens Open
+            icon: mdi:window-shutter-open
+            tap_action:
+              action: perform-action
+              perform_action: script.hcms_screens_open
+          - type: button
+            name: Ventilation Boost On
+            icon: mdi:fan-chevron-up
+            tap_action:
+              action: perform-action
+              perform_action: script.hcms_ventilation_boost_on
+          - type: button
+            name: Ventilation Boost Off
+            icon: mdi:fan-chevron-down
+            tap_action:
+              action: perform-action
+              perform_action: script.hcms_ventilation_boost_off
+          - type: button
+            name: Airco On
+            icon: mdi:snowflake
+            tap_action:
+              action: perform-action
+              perform_action: script.hcms_airco_on
+          - type: button
+            name: Airco Off
+            icon: mdi:snowflake-off
+            tap_action:
+              action: perform-action
+              perform_action: script.hcms_airco_off
+          - type: button
+            name: Storm Protection
+            icon: mdi:weather-lightning-rainy
+            tap_action:
+              action: perform-action
+              perform_action: script.hcms_storm_protection
+          - type: button
+            name: Deactivate All
+            icon: mdi:stop-circle-outline
+            tap_action:
+              action: perform-action
+              perform_action: script.hcms_deactivate_all_cooling
+
+  ##############################################################################
+  # VIEW 2 — SENSORS & DIAGNOSTICS
+  ##############################################################################
+
+  - title: Sensors
+    icon: mdi:chart-line
+    path: sensors
+    cards:
+
+      # ── Entity availability alarm ───────────────────────────────────────────
+      - type: conditional
+        conditions:
+          - condition: or
+            conditions:
+              - condition: state
+                entity: sensor.hcms_indoor_temperature
+                state: unavailable
+              - condition: state
+                entity: sensor.ws3900a_temperature_1
+                state: unavailable
+              - condition: state
+                entity: sensor.ws3900a_temperature_2
+                state: unavailable
+              - condition: state
+                entity: sensor.ws3900a_outdoor_temperature
+                state: unavailable
+              - condition: state
+                entity: sensor.ws3900a_solar_radiation
+                state: unavailable
+              - condition: state
+                entity: sensor.hcms_net_power_balance
+                state: unavailable
+              - condition: state
+                entity: sensor.hcms_forecast_today_max
+                state: unavailable
+              - condition: state
+                entity: weather.lanaken
+                state: unavailable
+              - condition: state
+                entity: cover.living_1
+                state: unavailable
+              - condition: state
+                entity: cover.living_2
+                state: unavailable
+              - condition: state
+                entity: cover.slaapkamer
+                state: unavailable
+              - condition: state
+                entity: fan.none_vmb4ry_airco_airco
+                state: unavailable
+              - condition: state
+                entity: fan.none_vmb4ry_ventilatie_sp2_ventilatie_sp2
+                state: unavailable
+              - condition: state
+                entity: fan.r4_stopcontacten_vmb4ryld_airco_vent_airco_vent
+                state: unavailable
+        card:
+          type: markdown
+          content: >
+            ## ⚠️ Entity Unavailable
+
+            One or more HCMS entities are unavailable.
+            Check the Diagnostics view for details.
+
+      # ── All HCMS entities availability ─────────────────────────────────────
+      - type: entities
+        title: Entity Health — Sensors
+        icon: mdi:heart-pulse
+        entities:
+          - entity: sensor.hcms_indoor_temperature
+            secondary_info: last-updated
+          - entity: sensor.ws3900a_temperature_1
+            name: Bedroom Temp (raw)
+            secondary_info: last-updated
+          - entity: sensor.ws3900a_temperature_2
+            name: Living Temp (raw)
+            secondary_info: last-updated
+          - entity: sensor.ws3900a_outdoor_temperature
+            name: Outdoor Temp (raw)
+            secondary_info: last-updated
+          - entity: sensor.ws3900a_solar_radiation
+            secondary_info: last-updated
+          - entity: sensor.ws3900a_rain_rate
+            secondary_info: last-updated
+          - entity: sensor.ws3900a_event_rain
+            secondary_info: last-updated
+          - entity: sensor.hcms_net_power_balance
+            secondary_info: last-updated
+          - entity: sensor.gemiddelde_productie_electriciteit_15min
+            name: PV Production 15min
+            secondary_info: last-updated
+          - entity: sensor.gemiddeld_verbruik_electriciteit_15min
+            name: Consumption 15min
+            secondary_info: last-updated
+          - entity: sensor.sun_solar_azimuth
+            secondary_info: last-updated
+          - entity: sensor.sun_solar_elevation
+            secondary_info: last-updated
+          - entity: sensor.hcms_net_power_balance
+            secondary_info: last-updated
+          - entity: sensor.hcms_temperature_error
+            secondary_info: last-updated
+          - entity: sensor.hcms_outdoor_delta
+            secondary_info: last-updated
+          - entity: sensor.hcms_climate_mode
+            secondary_info: last-changed
+          - entity: sensor.hcms_climate_reason
+            secondary_info: last-changed
+          - entity: sensor.hcms_cooling_priority
+            secondary_info: last-changed
+          - entity: sensor.hcms_screen_recommendation
+            secondary_info: last-changed
+
+      - type: entities
+        title: Entity Health — Forecast
+        icon: mdi:weather-partly-cloudy
+        entities:
+          - entity: weather.lanaken
+            secondary_info: last-updated
+          - entity: sensor.hcms_forecast_today_max
+            secondary_info: last-updated
+          - entity: sensor.hcms_forecast_today_min
+            secondary_info: last-updated
+          - entity: sensor.hcms_forecast_today_precip_prob
+            secondary_info: last-updated
+          - entity: sensor.hcms_forecast_tomorrow_max
+            secondary_info: last-updated
+          - entity: sensor.hcms_forecast_tomorrow_min
+            secondary_info: last-updated
+          - entity: sensor.hcms_forecast_tomorrow_precip_prob
+            secondary_info: last-updated
+          - entity: sensor.hcms_forecast_night_low
+            secondary_info: last-updated
+          - entity: binary_sensor.hcms_hot_day_today
+            secondary_info: last-changed
+          - entity: binary_sensor.hcms_hot_day_tomorrow
+            secondary_info: last-changed
+          - entity: binary_sensor.hcms_cool_night
+            secondary_info: last-changed
+          - entity: binary_sensor.hcms_precooling_recommended
+            secondary_info: last-changed
+          - entity: binary_sensor.hcms_storm_risk_today
+            secondary_info: last-changed
+          - entity: binary_sensor.hcms_storm_risk_tomorrow
+            secondary_info: last-changed
+
+      - type: entities
+        title: Entity Health — Actuators
+        icon: mdi:electric-switch
+        entities:
+          - entity: cover.living_1
+            secondary_info: last-changed
+          - entity: cover.living_2
+            secondary_info: last-changed
+          - entity: cover.slaapkamer
+            secondary_info: last-changed
+          - entity: fan.none_vmb4ry_ventilatie_sp2_ventilatie_sp2
+            secondary_info: last-changed
+          - entity: fan.none_vmb4ry_airco_airco
+            secondary_info: last-changed
+          - entity: fan.r4_stopcontacten_vmb4ryld_airco_vent_airco_vent
+            secondary_info: last-changed
+
+      # ── Temperature history graph ───────────────────────────────────────────
+      - type: history-graph
+        title: Temperature History (24h)
+        hours_to_show: 24
+        entities:
+          - entity: sensor.hcms_indoor_temperature
+            name: Indoor
+          - entity: sensor.ws3900a_temperature_1
+            name: Bedroom
+          - entity: sensor.ws3900a_temperature_2
+            name: Living
+          - entity: sensor.ws3900a_outdoor_temperature
+            name: Outdoor
+
+      # ── Power history graph ─────────────────────────────────────────────────
+      - type: history-graph
+        title: Power Balance History (24h)
+        hours_to_show: 24
+        entities:
+          - entity: sensor.hcms_net_power_balance
+            name: Net Balance
+          - entity: sensor.gemiddelde_productie_electriciteit_15min
+            name: PV Production
+          - entity: sensor.gemiddeld_verbruik_electriciteit_15min
+            name: Consumption
+
+  ##############################################################################
+  # VIEW 3 — SETTINGS
+  ##############################################################################
+
+  - title: Settings
+    icon: mdi:cog
+    path: settings
+    cards:
+
+      # ── Comfort ────────────────────────────────────────────────────────────
+      - type: entities
+        title: Comfort Settings
+        icon: mdi:thermometer
+        entities:
+          - entity: input_number.hcms_target_temperature
+            name: Target Temperature
+          - entity: input_number.hcms_screen_close_temperature
+            name: Screen Close Temperature
+          - entity: input_number.hcms_screen_open_temperature
+            name: Screen Open Temperature
+          - entity: input_number.hcms_screen_cooldown
+            name: Screen Cooldown (min)
+
+      # ── Cooling thresholds ──────────────────────────────────────────────────
+      - type: entities
+        title: Cooling Thresholds
+        icon: mdi:fan
+        entities:
+          - entity: input_number.hcms_free_cooling_delta
+            name: Free Cooling Delta (°C)
+          - entity: input_number.hcms_night_flush_delta
+            name: Night Flush Delta (°C)
+
+      # ── Solar thresholds ────────────────────────────────────────────────────
+      - type: entities
+        title: Solar Thresholds
+        icon: mdi:solar-power
+        entities:
+          - entity: input_number.hcms_solar_surplus_threshold
+            name: Solar Surplus Threshold (W)
+          - entity: input_number.hcms_radiation_threshold
+            name: Radiation Threshold (W/m²)
+
+      # ── Forecast thresholds ─────────────────────────────────────────────────
+      - type: entities
+        title: Forecast Thresholds
+        icon: mdi:weather-partly-cloudy
+        entities:
+          - entity: input_number.hcms_hot_day_threshold
+            name: Hot Day Threshold (°C)
+          - entity: input_number.hcms_cool_night_threshold
+            name: Cool Night Threshold (°C)
+
+      # ── Internals ───────────────────────────────────────────────────────────
+      - type: entities
+        title: Internal State
+        icon: mdi:information-outline
+        entities:
+          - entity: input_datetime.last_screen_automation
+            name: Last Screen Move
+          - entity: input_boolean.hcms_screen_moving
+            name: Screen Moving Flag
+          - entity: input_boolean.screens_manual_override
+            name: Manual Override Active

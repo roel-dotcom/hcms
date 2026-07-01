@@ -1,0 +1,178 @@
+################################################################################
+# HCMS Family Dashboard
+# Clean daily-use view. No technical detail — just comfort, forecast, control.
+# Register in configuration.yaml:
+#   lovelace:
+#     dashboards:
+#       hcms-family:
+#         mode: yaml
+#         title: Klimaat
+#         icon: mdi:home-heart
+#         filename: dashboards/hcms_family_dashboard.yaml
+################################################################################
+
+title: Klimaat
+views:
+
+  - title: Thuis
+    icon: mdi:home-heart
+    path: home
+    badges: []
+    cards:
+
+      # ── Alarm banner — only shows when something needs attention ────────────
+      - type: conditional
+        conditions:
+          - condition: state
+            entity: input_boolean.hcms_enabled
+            state: "off"
+        card:
+          type: markdown
+          content: >
+            ## ⏸️ Klimaatbeheer staat uit
+            Zet HCMS aan via de instellingen.
+
+      - type: conditional
+        conditions:
+          - condition: state
+            entity: binary_sensor.hcms_storm_risk_today
+            state: "on"
+        card:
+          type: markdown
+          content: >
+            ## ⛈️ Stormrisico vandaag
+            De schermen blijven open als bescherming.
+
+      - type: conditional
+        conditions:
+          - condition: state
+            entity: input_boolean.screens_manual_override
+            state: "on"
+        card:
+          type: markdown
+          content: >
+            ## 🖐 Handmatige bediening actief
+            De schermen worden vandaag niet automatisch gesloten.
+            Morgen hervat de automatisering.
+
+      - type: conditional
+        conditions:
+          - condition: or
+            conditions:
+              - condition: state
+                entity: sensor.hcms_indoor_temperature
+                state: unavailable
+              - condition: state
+                entity: sensor.ws3900a_outdoor_temperature
+                state: unavailable
+              - condition: state
+                entity: weather.lanaken
+                state: unavailable
+        card:
+          type: markdown
+          content: >
+            ## ⚠️ Sensor niet beschikbaar
+            Een of meer sensoren reageren niet.
+            Controleer het admin-dashboard.
+
+      # ── Current state ───────────────────────────────────────────────────────
+      - type: glance
+        title: Nu
+        show_name: true
+        show_state: true
+        columns: 3
+        entities:
+          - entity: sensor.ws3900a_temperature_1
+            name: Slaapkamer
+          - entity: sensor.ws3900a_temperature_2
+            name: Woonkamer
+          - entity: sensor.ws3900a_outdoor_temperature
+            name: Buiten
+          - entity: sensor.hcms_climate_mode
+            name: Modus
+          - entity: binary_sensor.hcms_rain_detected
+            name: Regen
+          - entity: binary_sensor.hcms_solar_surplus
+            name: Zonne-overschot
+
+      # ── What is the system doing and why ───────────────────────────────────
+      - type: markdown
+        content: >
+          ### Waarom?
+          {{ states('sensor.hcms_climate_reason') }}
+
+      # ── Forecast ────────────────────────────────────────────────────────────
+      - type: weather-forecast
+        entity: weather.lanaken
+        forecast_type: daily
+        name: Weersvoorspelling
+
+      - type: glance
+        title: Verwachting
+        columns: 3
+        entities:
+          - entity: sensor.hcms_forecast_today_max
+            name: Vandaag max
+          - entity: sensor.hcms_forecast_today_min
+            name: Vandaag min
+          - entity: sensor.hcms_forecast_today_precip_prob
+            name: Neerslag %
+          - entity: sensor.hcms_forecast_tomorrow_max
+            name: Morgen max
+          - entity: sensor.hcms_forecast_tomorrow_min
+            name: Morgen min
+          - entity: binary_sensor.hcms_precooling_recommended
+            name: Pre-koelen?
+
+      # ── Screens ─────────────────────────────────────────────────────────────
+      - type: entities
+        title: Schermen
+        icon: mdi:window-shutter
+        entities:
+          - entity: cover.living_1
+            name: Living midden
+          - entity: cover.living_2
+            name: Living rechts
+          - entity: cover.slaapkamer
+            name: Slaapkamer
+
+      - type: grid
+        columns: 2
+        square: false
+        cards:
+          - type: button
+            name: Schermen omhoog
+            icon: mdi:window-shutter-open
+            tap_action:
+              action: perform-action
+              perform_action: script.hcms_screens_open
+          - type: button
+            name: Schermen omlaag
+            icon: mdi:window-shutter
+            tap_action:
+              action: perform-action
+              perform_action: script.hcms_screens_close
+
+      # ── Holiday mode ────────────────────────────────────────────────────────
+      - type: entities
+        title: Vakantie & Beheer
+        icon: mdi:beach
+        entities:
+          - entity: input_boolean.hcms_holiday_mode
+            name: Vakantiemodus
+          - entity: input_boolean.hcms_enabled
+            name: Klimaatbeheer aan/uit
+          - entity: input_number.hcms_target_temperature
+            name: Gewenste temperatuur
+
+      # ── Temperature history (simple) ────────────────────────────────────────
+      - type: history-graph
+        title: Temperatuur vandaag
+        hours_to_show: 12
+        entities:
+          - entity: sensor.ws3900a_temperature_1
+            name: Slaapkamer
+          - entity: sensor.ws3900a_temperature_2
+            name: Woonkamer
+          - entity: sensor.ws3900a_outdoor_temperature
+            name: Buiten

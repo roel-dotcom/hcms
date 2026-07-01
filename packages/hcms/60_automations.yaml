@@ -1,0 +1,453 @@
+################################################################################
+# HCMS - Home Climate Management System
+# Version: 0.3
+#
+# Automation Engine
+#
+# Automations read Climate Mode and call composite scripts.
+# They never control hardware directly.
+#
+# Minimum runtime protection:
+#   Airco:       15 minutes minimum before switching off
+#   Ventilation: 20 minutes minimum before switching off
+#   Screens:     hcms_screen_cooldown (input_number, default 15 min)
+#                measured via input_datetime.last_screen_automation
+#
+# Manual override logic:
+#   - Any cover movement NOT initiated by HCMS sets screens_manual_override
+#   - Override blocks all automatic screen closing for the rest of the day
+#   - Rain/storm always wins — opens screens regardless of override
+#   - Override resets at midnight
+#
+# New helper needed (add to 10_helpers.yaml):
+#   input_boolean.hcms_screen_moving   Flag set by scripts during HCMS moves
+################################################################################
+
+automation:
+
+  ############################################################################
+  # CLIMATE MODE RESPONSE
+  # Single automation watches Climate Mode changes and calls the right script.
+  ############################################################################
+
+  - id: hcms_climate_mode_response
+    alias: "HCMS Climate Mode Response"
+    description: >
+      Responds to Climate Mode changes by calling the appropriate
+      composite script. This is the central dispatcher.
+    triggers:
+      - trigger: state
+        entity_id: sensor.hcms_climate_mode
+    conditions:
+      - condition: state
+        entity_id: input_boolean.hcms_enabled
+        state: "on"
+      - condition: template
+        value_template: >
+          {{ trigger.to_state.state != trigger.from_state.state }}
+    actions:
+      - choose:
+          - conditions:
+              - condition: state
+                entity_id: sensor.hcms_climate_mode
+                state: "STORM_PROTECTION"
+            sequence:
+              - action: script.hcms_storm_protection
+
+          - conditions:
+              - condition: state
+                entity_id: sensor.hcms_climate_mode
+                state:
+                  - "NIGHT_FLUSH"
+                  - "FREE_COOLING"
+            sequence:
+              - action: script.hcms_activate_free_cooling
+
+          - conditions:
+              - condition: state
+                entity_id: sensor.hcms_climate_mode
+                state:
+                  - "ACTIVE_COOLING"
+                  - "SOLAR_PRECOOL"
+            sequence:
+              # Minimum ventilation runtime check before switching to airco
+              - condition: template
+                value_template: >
+                  {% set last = states('input_datetime.last_screen_automation') %}
+                  {% set min_runtime = 20 %}
+                  {% if last == 'unknown' %}
+                    true
+                  {% else %}
+                    {{
+                      (now() - last | as_datetime).total_seconds() / 60
+                      >= min_runtime
+                    }}
+                  {% endif %}
+              - action: script.hcms_activate_airco_cooling
+
+          - conditions:
+              - condition: state
+                entity_id: sensor.hcms_climate_mode
+                state:
+                  - "IDLE"
+                  - "WINTER_PASSIVE"
+                  - "HOLIDAY"
+                  - "DISABLED"
+            sequence:
+              - action: script.hcms_deactivate_all_cooling
+
+  ############################################################################
+  # AIRCO MINIMUM RUNTIME
+  # Prevents airco from turning off too quickly when mode changes.
+  # If mode changes away from cooling within 15 minutes of airco starting,
+  # this automation delays the off call.
+  ############################################################################
+
+  - id: hcms_airco_minimum_runtime
+    alias: "HCMS Airco Minimum Runtime Guard"
+    description: >
+      When airco is on and Climate Mode leaves ACTIVE_COOLING/SOLAR_PRECOOL,
+      wait for 15-minute minimum runtime before turning off.
+    triggers:
+      - trigger: state
+        entity_id: sensor.hcms_climate_mode
+    conditions:
+      - condition: template
+        value_template: >
+          {{
+            trigger.from_state.state in ['ACTIVE_COOLING', 'SOLAR_PRECOOL']
+            and trigger.to_state.state not in ['ACTIVE_COOLING', 'SOLAR_PRECOOL']
+          }}
+      - condition: or
+        conditions:
+          - condition: state
+            entity_id: fan.none_vmb4ry_airco_airco
+            state: "on"
+          - condition: state
+            entity_id: switch.airco
+            state: "on"
+    actions:
+      - delay:
+          minutes: 15
+      # Re-check after delay — mode may have returned to cooling
+      - condition: template
+        value_template: >
+          {{
+            states('sensor.hcms_climate_mode')
+            not in ['ACTIVE_COOLING', 'SOLAR_PRECOOL']
+          }}
+      - action: script.hcms_airco_off
+
+  ############################################################################
+  # SCREEN MANUAL OVERRIDE DETECTION
+  # Watches all three covers for movement not caused by HCMS.
+  # Sets screens_manual_override for the rest of the day.
+  ############################################################################
+
+  - id: hcms_screen_manual_override_detect
+    alias: "HCMS Screen Manual Override — Detect"
+    description: >
+      Fires when a cover STARTS moving (opening/closing) while
+      hcms_screen_moving is off. This means a human (remote/wall switch)
+      initiated the movement. Sets screens_manual_override to block
+      automatic closing for the rest of today.
+      Triggers on opening/closing only (not the final open/closed state)
+      since that is the earliest reliable signal of who initiated the move.
+    triggers:
+      - trigger: state
+        entity_id:
+          - cover.living_1
+          - cover.living_2
+          - cover.slaapkamer
+        to:
+          - "opening"
+          - "closing"
+    conditions:
+      # Only act when HCMS was NOT the one moving the screens
+      - condition: state
+        entity_id: input_boolean.hcms_screen_moving
+        state: "off"
+    actions:
+      - action: input_boolean.turn_on
+        target:
+          entity_id: input_boolean.screens_manual_override
+      - action: logbook.log
+        data:
+          name: "HCMS"
+          message: >
+            Manual override activated — {{ trigger.entity_id }} moved by remote.
+            Auto-close blocked for the rest of today.
+
+  ############################################################################
+  # SCREEN MANUAL OVERRIDE — MIDNIGHT RESET
+  ############################################################################
+
+  - id: hcms_screen_override_midnight_reset
+    alias: "HCMS Screen Override — Midnight Reset"
+    description: >
+      Clears the manual override flag at midnight each day.
+      Screens are back under HCMS control the next morning.
+    triggers:
+      - trigger: time
+        at: "00:00:00"
+    actions:
+      - action: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.screens_manual_override
+      - action: logbook.log
+        data:
+          name: "HCMS"
+          message: "Screen manual override cleared — new day, automation resumed."
+
+  ############################################################################
+  # SCREEN COOLDOWN GUARD
+  # Prevents screens from moving more than once per cooldown period.
+  # Runs as a separate automation watching screen recommendations.
+  ############################################################################
+
+  - id: hcms_screen_cooldown_guard
+    alias: "HCMS Screen Cooldown Guard"
+    description: >
+      Watches hcms_screen_recommendation changes.
+      Blocks action if screens were moved within the cooldown window
+      (input_number.hcms_screen_cooldown, default 15 min).
+    triggers:
+      - trigger: state
+        entity_id: sensor.hcms_screen_recommendation
+    conditions:
+      - condition: state
+        entity_id: input_boolean.hcms_enabled
+        state: "on"
+      - condition: state
+        entity_id: input_boolean.hcms_screen_control
+        state: "on"
+      - condition: template
+        value_template: >
+          {{ trigger.to_state.state != trigger.from_state.state }}
+      # Cooldown check
+      - condition: template
+        value_template: >
+          {% set last = states('input_datetime.last_screen_automation') %}
+          {% set cooldown = states('input_number.hcms_screen_cooldown')|float(15) %}
+          {% if last in ['unknown', 'unavailable'] %}
+            true
+          {% else %}
+            {{
+              (now() - last | as_datetime).total_seconds() / 60
+              >= cooldown
+            }}
+          {% endif %}
+    actions:
+      - choose:
+          - conditions:
+              - condition: state
+                entity_id: sensor.hcms_screen_recommendation
+                state: "CLOSE"
+              - condition: state
+                entity_id: input_boolean.screens_manual_override
+                state: "off"
+            sequence:
+              - action: script.hcms_screens_close
+
+          - conditions:
+              - condition: state
+                entity_id: sensor.hcms_screen_recommendation
+                state: "OPEN"
+            sequence:
+              - action: script.hcms_screens_open
+
+  ############################################################################
+  # PERIODIC SCREEN CHECK
+  # Runs every 15 minutes independently of Climate Mode changes.
+  # Screens need to react to sun position changes throughout the day
+  # even when the climate mode stays the same.
+  ############################################################################
+
+  - id: hcms_periodic_screen_check
+    alias: "HCMS Periodic Screen Check"
+    description: >
+      Re-evaluates screen recommendation every 15 minutes.
+      Needed because sun position changes throughout the day
+      independently of Climate Mode changes.
+      Respects cooldown, override, and storm protection.
+    triggers:
+      - trigger: time_pattern
+        minutes: "/15"
+    conditions:
+      - condition: state
+        entity_id: input_boolean.hcms_enabled
+        state: "on"
+      - condition: state
+        entity_id: input_boolean.hcms_screen_control
+        state: "on"
+      - condition: not
+        conditions:
+          - condition: state
+            entity_id: sensor.hcms_climate_mode
+            state: "STORM_PROTECTION"
+      - condition: template
+        value_template: >
+          {% set last = states('input_datetime.last_screen_automation') %}
+          {% set cooldown = states('input_number.hcms_screen_cooldown')|float(15) %}
+          {% if last in ['unknown', 'unavailable'] %}
+            true
+          {% else %}
+            {{ (now() - last | as_datetime).total_seconds() / 60 >= cooldown }}
+          {% endif %}
+    actions:
+      - choose:
+          - conditions:
+              - condition: state
+                entity_id: sensor.hcms_screen_recommendation
+                state: "CLOSE"
+              - condition: state
+                entity_id: input_boolean.screens_manual_override
+                state: "off"
+            sequence:
+              - action: script.hcms_screens_close
+          - conditions:
+              - condition: state
+                entity_id: sensor.hcms_screen_recommendation
+                state: "OPEN"
+            sequence:
+              - action: script.hcms_screens_open
+
+  ############################################################################
+  # FORECAST REFRESH
+  # Moved here from 30_forecast.yaml for clarity — all automations in one file.
+  # (Remove from 30_forecast.yaml if you place it here)
+  ############################################################################
+
+  - id: hcms_forecast_refresh
+    alias: "HCMS Forecast Refresh"
+    description: >
+      Fetches daily forecast from IRM/KMI every 3 hours and at startup.
+      Stores individual values in input_number/input_text helpers so
+      template sensors can read them without serialization issues.
+    triggers:
+      - trigger: homeassistant
+        event: start
+      - trigger: time_pattern
+        hours: "/3"
+    conditions:
+      - condition: state
+        entity_id: input_boolean.hcms_enabled
+        state: "on"
+    actions:
+      - action: weather.get_forecasts
+        target:
+          entity_id: weather.lanaken
+        data:
+          type: daily
+        response_variable: fc
+      - action: input_number.set_value
+        target:
+          entity_id: input_number.hcms_fc_today_max
+        data:
+          value: "{{ fc['weather.lanaken'].forecast[0].temperature | float(0) }}"
+      - action: input_number.set_value
+        target:
+          entity_id: input_number.hcms_fc_today_min
+        data:
+          value: "{{ fc['weather.lanaken'].forecast[0].templow | float(0) }}"
+      - action: input_number.set_value
+        target:
+          entity_id: input_number.hcms_fc_today_precip
+        data:
+          value: "{{ fc['weather.lanaken'].forecast[0].precipitation_probability | int(0) }}"
+      - action: input_text.set_value
+        target:
+          entity_id: input_text.hcms_fc_today_condition
+        data:
+          value: "{{ fc['weather.lanaken'].forecast[0].condition | string }}"
+      - action: input_number.set_value
+        target:
+          entity_id: input_number.hcms_fc_tomorrow_max
+        data:
+          value: "{{ fc['weather.lanaken'].forecast[1].temperature | float(0) }}"
+      - action: input_number.set_value
+        target:
+          entity_id: input_number.hcms_fc_tomorrow_min
+        data:
+          value: "{{ fc['weather.lanaken'].forecast[1].templow | float(0) }}"
+      - action: input_number.set_value
+        target:
+          entity_id: input_number.hcms_fc_tomorrow_precip
+        data:
+          value: "{{ fc['weather.lanaken'].forecast[1].precipitation_probability | int(0) }}"
+      - action: input_number.set_value
+        target:
+          entity_id: input_number.hcms_fc_night_low
+        data:
+          value: "{{ fc['weather.lanaken'].forecast[1].templow | float(0) }}"
+      - action: input_text.set_value
+        target:
+          entity_id: input_text.hcms_fc_tomorrow_condition
+        data:
+          value: "{{ fc['weather.lanaken'].forecast[1].condition | string }}"
+      - action: input_text.set_value
+        target:
+          entity_id: input_text.hcms_fc_tomorrow_condition_2
+        data:
+          value: "{{ fc['weather.lanaken'].forecast[1].condition_2 | string }}"
+      - action: input_datetime.set_datetime
+        target:
+          entity_id: input_datetime.hcms_forecast_updated
+        data:
+          datetime: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }}"
+
+  ############################################################################
+  # STARTUP INITIALISATION
+  # Ensures HCMS evaluates current conditions immediately after HA restarts.
+  ############################################################################
+
+  - id: hcms_startup_init
+    alias: "HCMS Startup Initialisation"
+    description: >
+      Fires 30 seconds after HA starts to let all entities settle,
+      then triggers a climate mode evaluation.
+    triggers:
+      - trigger: homeassistant
+        event: start
+    actions:
+      - delay:
+          seconds: 30
+      - action: logbook.log
+        data:
+          name: "HCMS"
+          message: >
+            HCMS initialised. Climate Mode: {{ states('sensor.hcms_climate_mode') }}.
+            Reason: {{ states('sensor.hcms_climate_reason') }}
+      # Force mode response by momentarily evaluating current state
+      - choose:
+          - conditions:
+              - condition: state
+                entity_id: sensor.hcms_climate_mode
+                state: "STORM_PROTECTION"
+            sequence:
+              - action: script.hcms_storm_protection
+          - conditions:
+              - condition: state
+                entity_id: sensor.hcms_climate_mode
+                state:
+                  - "NIGHT_FLUSH"
+                  - "FREE_COOLING"
+            sequence:
+              - action: script.hcms_activate_free_cooling
+          - conditions:
+              - condition: state
+                entity_id: sensor.hcms_climate_mode
+                state:
+                  - "ACTIVE_COOLING"
+                  - "SOLAR_PRECOOL"
+            sequence:
+              - action: script.hcms_activate_airco_cooling
+          - conditions:
+              - condition: state
+                entity_id: sensor.hcms_climate_mode
+                state:
+                  - "IDLE"
+                  - "WINTER_PASSIVE"
+                  - "HOLIDAY"
+            sequence:
+              - action: script.hcms_deactivate_all_cooling

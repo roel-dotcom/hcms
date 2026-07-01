@@ -1,0 +1,326 @@
+################################################################################
+# HCMS - Home Climate Management System
+# Version: 0.2
+#
+# Current Conditions Brain
+#
+# Provides abstracted, enriched sensor readings for the Strategy layer.
+# Does NOT make decisions — only observes and calculates.
+#
+# Entity reference (from home_assistant_climate_entities.xlsx):
+#   sensor.ws3900a_temperature_1          Bedroom temperature (primary)
+#   sensor.ws3900a_temperature_2          Living room temperature
+#   sensor.ws3900a_outdoor_temperature    Outdoor temperature
+#   sensor.ws3900a_solar_radiation        Solar radiation W/m²
+#   sensor.ws3900a_solar_lux              Solar lux
+#   sensor.ws3900a_rain_rate              Rain rate
+#   sensor.ws3900a_event_rain             Rain event counter
+#   sensor.sun_solar_azimuth              Sun azimuth (native HA entity)
+#   sensor.sun_solar_elevation            Sun elevation (native HA entity)
+#   sensor.net_power_balance              PV minus consumption (existing)
+#   sensor.gemiddelde_productie_electriciteit_15min   PV 15min avg
+#   sensor.gemiddeld_verbruik_electriciteit_15min     Consumption 15min avg
+################################################################################
+
+template:
+
+  ##########################################################################
+  # Sensors
+  ##########################################################################
+
+  - sensor:
+
+      ######################################################################
+      # Weighted Indoor Temperature
+      # Bedroom = 65% (primary comfort zone, hardest to cool)
+      # Living  = 35% (secondary reference)
+      # Degrades gracefully if either sensor is unavailable.
+      ######################################################################
+
+      - name: "HCMS Indoor Temperature"
+        unique_id: hcms_indoor_temperature
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state_class: measurement
+        state: >
+          {% set bedroom = states('sensor.ws3900a_temperature_1')|float(none) %}
+          {% set living  = states('sensor.ws3900a_temperature_2')|float(none) %}
+          {% if bedroom is none and living is none %}
+            {{ 'unavailable' }}
+          {% elif bedroom is none %}
+            {{ living | round(1) }}
+          {% elif living is none %}
+            {{ bedroom | round(1) }}
+          {% else %}
+            {{ (bedroom * 0.65 + living * 0.35) | round(1) }}
+          {% endif %}
+
+      ######################################################################
+      # Temperature Error
+      # Positive = too warm. Negative = too cool.
+      # Strategy layer reads this as the primary comfort signal.
+      ######################################################################
+
+      - name: "HCMS Temperature Error"
+        unique_id: hcms_temperature_error
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state: >
+          {{
+            (
+              states('sensor.hcms_indoor_temperature')|float(0)
+              -
+              states('input_number.hcms_target_temperature')|float(22)
+            ) | round(1)
+          }}
+
+      ######################################################################
+      # Net Power Balance
+      # Re-exposes sensor.net_power_balance with HCMS namespace.
+      # Positive = exporting solar surplus. Negative = importing.
+      # Uses existing net_power_balance if available; falls back to
+      # calculating from production/consumption sensors.
+      ######################################################################
+
+      - name: "HCMS Net Power Balance"
+        unique_id: hcms_net_power_balance
+        unit_of_measurement: "W"
+        device_class: power
+        state_class: measurement
+        state: >
+          {% set net = states('sensor.net_power_balance')|float(none) %}
+          {% if net is not none %}
+            {{ net | round(0) }}
+          {% else %}
+            {{
+              (
+                states('sensor.gemiddelde_productie_electriciteit_15min')|float(0)
+                -
+                states('sensor.gemiddeld_verbruik_electriciteit_15min')|float(0)
+              ) | round(0)
+            }}
+          {% endif %}
+
+      ######################################################################
+      # Outdoor Delta
+      # How much cooler outside is vs weighted indoor.
+      # Positive = outside cooler (free cooling potential).
+      # Negative = outside warmer (ventilation would heat the house).
+      ######################################################################
+
+      - name: "HCMS Outdoor Delta"
+        unique_id: hcms_outdoor_delta
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state: >
+          {{
+            (
+              states('sensor.hcms_indoor_temperature')|float(0)
+              -
+              states('sensor.ws3900a_outdoor_temperature')|float(0)
+            ) | round(1)
+          }}
+
+      ######################################################################
+      # Bedroom Delta
+      # Bedroom vs living room difference.
+      # Useful for routing airco duct fan: high delta = bedroom needs more.
+      ######################################################################
+
+      - name: "HCMS Bedroom Delta"
+        unique_id: hcms_bedroom_delta
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state: >
+          {{
+            (
+              states('sensor.ws3900a_temperature_1')|float(0)
+              -
+              states('sensor.ws3900a_temperature_2')|float(0)
+            ) | round(1)
+          }}
+
+  ##########################################################################
+  # Binary Sensors
+  ##########################################################################
+
+  - binary_sensor:
+
+      ######################################################################
+      # Needs Cooling
+      # 0.3°C deadband above target to prevent rapid toggling.
+      ######################################################################
+
+      - name: "HCMS Needs Cooling"
+        unique_id: hcms_needs_cooling
+        state: >
+          {{
+            states('sensor.hcms_indoor_temperature')|float(0)
+            >
+            states('input_number.hcms_target_temperature')|float(22) + 0.3
+          }}
+
+      ######################################################################
+      # Needs Heating
+      # 0.5°C below target — asymmetric deadband (we tolerate cool better).
+      ######################################################################
+
+      - name: "HCMS Needs Heating"
+        unique_id: hcms_needs_heating
+        state: >
+          {{
+            states('sensor.hcms_indoor_temperature')|float(0)
+            <
+            states('input_number.hcms_target_temperature')|float(22) - 0.5
+          }}
+
+      ######################################################################
+      # Solar Surplus
+      # True when we're exporting more than the configured threshold.
+      # Allows AC to start earlier, using free solar instead of grid.
+      ######################################################################
+
+      - name: "HCMS Solar Surplus"
+        unique_id: hcms_solar_surplus
+        state: >
+          {{
+            states('sensor.hcms_net_power_balance')|float(0)
+            >
+            states('input_number.hcms_solar_surplus_threshold')|float(1500)
+          }}
+
+      ######################################################################
+      # Free Cooling Possible
+      # True when outside is cool enough to effectively ventilate.
+      # Uses configurable delta (default 1°C).
+      ######################################################################
+
+      - name: "HCMS Free Cooling Possible"
+        unique_id: hcms_free_cooling_possible
+        state: >
+          {{
+            states('sensor.ws3900a_outdoor_temperature')|float(99)
+            <
+            (
+              states('sensor.hcms_indoor_temperature')|float(0)
+              -
+              states('input_number.hcms_free_cooling_delta')|float(1)
+            )
+          }}
+
+      ######################################################################
+      # Strong Sun
+      # True when solar radiation exceeds the configured threshold.
+      # Used as gate for screen closure decisions.
+      ######################################################################
+
+      - name: "HCMS Strong Sun"
+        unique_id: hcms_strong_sun
+        state: >
+          {{
+            states('sensor.ws3900a_solar_radiation')|float(0)
+            >
+            states('input_number.hcms_radiation_threshold')|float(200)
+          }}
+
+      ######################################################################
+      # Sun Facing Windows
+      # Uses native sensor.sun_solar_azimuth / elevation entities.
+      # Azimuth 130–250° = sun arc over south-facing facade.
+      # Elevation ≥ 15° = sun high enough to enter through glass.
+      # Adjust azimuth range if your windows are not exactly south-facing.
+      ######################################################################
+
+      - name: "HCMS Sun Facing Windows"
+        unique_id: hcms_sun_facing_windows
+        state: >
+          {% set az = states('sensor.sun_solar_azimuth')|float(0) %}
+          {% set el = states('sensor.sun_solar_elevation')|float(0) %}
+          {{ az >= 75 and az <= 240 and el >= 15 }}
+
+      ######################################################################
+      # Screens Should Close
+      # Combines: sun position, radiation, indoor temp, rain, winter guard.
+      # Defers to existing binary_sensor.hcms_sun_facing_windows for the
+      # sun geometry check (reuses your existing logic).
+      # Winter guard: never close when outdoor < 12°C (free solar heating).
+      ######################################################################
+
+      - name: "HCMS Screens Should Close"
+        unique_id: hcms_screens_should_close
+        state: >
+          {% set outdoor  = states('sensor.ws3900a_outdoor_temperature')|float(0) %}
+          {% set indoor   = states('sensor.hcms_indoor_temperature')|float(0) %}
+          {% set target   = states('input_number.hcms_screen_close_temperature')|float(22) %}
+          {% set sun_risk = states('binary_sensor.hcms_sun_facing_windows') == 'on' %}
+          {% set rad_ok   = states('binary_sensor.hcms_strong_sun') == 'on' %}
+          {% set raining  = states('binary_sensor.hcms_rain_detected') == 'on' %}
+          {% set winter   = outdoor < 12 %}
+          {{
+            not winter
+            and not raining
+            and sun_risk
+            and rad_ok
+            and indoor >= target
+          }}
+
+      ######################################################################
+      # Screens Should Open
+      # Open when: rain, sun past windows, or temperature recovered.
+      # Opens when sun is no longer on the windows or indoor temp recovers.
+      ######################################################################
+
+      - name: "HCMS Screens Should Open"
+        unique_id: hcms_screens_should_open
+        state: >
+          {% set indoor   = states('sensor.hcms_indoor_temperature')|float(0) %}
+          {% set open_t   = states('input_number.hcms_screen_open_temperature')|float(21.5) %}
+          {% set raining  = states('binary_sensor.hcms_rain_detected') == 'on' %}
+          {% set sun_gone = states('binary_sensor.hcms_sun_facing_windows') == 'off' %}
+          {{
+            raining
+            or sun_gone
+            or indoor <= open_t
+          }}
+
+      ######################################################################
+      # Night Flush Available
+      # Night hours (21:00–07:00) AND outside cool enough to flush.
+      ######################################################################
+
+      - name: "HCMS Night Flush Available"
+        unique_id: hcms_night_flush_available
+        state: >
+          {% set hour    = now().hour %}
+          {% set night   = hour >= 21 or hour < 7 %}
+          {% set delta   = states('input_number.hcms_night_flush_delta')|float(2) %}
+          {% set outdoor = states('sensor.ws3900a_outdoor_temperature')|float(99) %}
+          {% set indoor  = states('sensor.hcms_indoor_temperature')|float(0) %}
+          {{
+            night
+            and (outdoor < indoor - delta)
+          }}
+
+      ######################################################################
+      # Rain Detected
+      # Reuses your existing combined sensor.
+      ######################################################################
+
+      - name: "HCMS Rain Detected"
+        unique_id: hcms_rain_detected
+        state: >
+          {{
+            states('sensor.ws3900a_rain_rate')|float(0) > 0
+            or states('sensor.ws3900a_event_rain')|float(0) > 0
+          }}
+
+      ######################################################################
+      # Duct Fan Needed
+      # True when bedroom is significantly warmer than living room.
+      # Signals that the airco duct fan to bedroom should run.
+      ######################################################################
+
+      - name: "HCMS Duct Fan Needed"
+        unique_id: hcms_duct_fan_needed
+        state: >
+          {{ states('sensor.hcms_bedroom_delta')|float(0) > 0.8 }}

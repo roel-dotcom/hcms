@@ -1,0 +1,252 @@
+################################################################################
+# HCMS - Home Climate Management System
+# Version: 0.3
+#
+# Helpers — All input_number, input_boolean, input_datetime
+#
+# Changelog:
+#   0.1  Initial helpers (ChatGPT session)
+#   0.2  Added hcms_hot_day_threshold, hcms_cool_night_threshold (30_forecast)
+#   0.3  Added hcms_screen_moving flag for manual override detection
+################################################################################
+
+input_number:
+
+  # ── Comfort ────────────────────────────────────────────────────────────────
+
+  hcms_target_temperature:
+    name: "HCMS Target Temperature"
+    icon: mdi:thermometer
+    min: 18
+    max: 26
+    step: 0.5
+    initial: 22
+    unit_of_measurement: "°C"
+
+  # ── Screens ────────────────────────────────────────────────────────────────
+
+  hcms_screen_close_temperature:
+    name: "HCMS Screen Close Temperature"
+    icon: mdi:window-shutter
+    min: 18
+    max: 30
+    step: 0.5
+    initial: 22
+    unit_of_measurement: "°C"
+
+  hcms_screen_open_temperature:
+    name: "HCMS Screen Open Temperature"
+    icon: mdi:window-shutter-open
+    min: 18
+    max: 30
+    step: 0.5
+    initial: 21.5
+    unit_of_measurement: "°C"
+
+  hcms_screen_cooldown:
+    name: "HCMS Screen Cooldown"
+    icon: mdi:timer
+    min: 5
+    max: 120
+    step: 5
+    initial: 15
+    unit_of_measurement: "min"
+
+  # ── Ventilation / Cooling ──────────────────────────────────────────────────
+
+  hcms_free_cooling_delta:
+    name: "HCMS Free Cooling Delta"
+    icon: mdi:fan
+    min: 0.5
+    max: 5
+    step: 0.5
+    initial: 1
+    unit_of_measurement: "°C"
+
+  hcms_night_flush_delta:
+    name: "HCMS Night Flush Delta"
+    icon: mdi:weather-night
+    min: 1
+    max: 5
+    step: 0.5
+    initial: 2
+    unit_of_measurement: "°C"
+
+  # ── Solar ──────────────────────────────────────────────────────────────────
+
+  hcms_solar_surplus_threshold:
+    name: "HCMS Solar Surplus Threshold"
+    icon: mdi:solar-power
+    min: 500
+    max: 6000
+    step: 100
+    initial: 1500
+    unit_of_measurement: "W"
+
+  hcms_radiation_threshold:
+    name: "HCMS Solar Radiation Threshold"
+    icon: mdi:white-balance-sunny
+    min: 100
+    max: 1000
+    step: 25
+    initial: 200
+    unit_of_measurement: "W/m²"
+
+  hcms_lux_threshold:
+    name: "HCMS Lux Threshold"
+    icon: mdi:brightness-7
+    min: 5000
+    max: 100000
+    step: 1000
+    initial: 25000
+    unit_of_measurement: "lx"
+
+  # ── Forecast ───────────────────────────────────────────────────────────────
+
+  hcms_hot_day_threshold:
+    name: "HCMS Hot Day Threshold"
+    icon: mdi:thermometer-high
+    min: 22
+    max: 38
+    step: 0.5
+    initial: 28
+    unit_of_measurement: "°C"
+
+  hcms_cool_night_threshold:
+    name: "HCMS Cool Night Threshold"
+    icon: mdi:weather-night
+    min: 10
+    max: 22
+    step: 0.5
+    initial: 18
+    unit_of_measurement: "°C"
+
+################################################################################
+
+input_boolean:
+
+  # ── Master switches ────────────────────────────────────────────────────────
+
+  hcms_enabled:
+    name: "HCMS Enabled"
+    icon: mdi:home-automation
+
+  hcms_screen_control:
+    name: "Screen Automation Enabled"
+    icon: mdi:window-shutter
+
+  hcms_airco_control:
+    name: "Airco Automation Enabled"
+    icon: mdi:air-conditioner
+
+  hcms_ventilation_control:
+    name: "Ventilation Automation Enabled"
+    icon: mdi:fan
+
+  # ── Modes ──────────────────────────────────────────────────────────────────
+
+  hcms_learning_mode:
+    name: "Learning Mode"
+    icon: mdi:brain
+
+  hcms_holiday_mode:
+    name: "Holiday Mode"
+    icon: mdi:beach
+
+  # ── Screen override & movement flag ───────────────────────────────────────
+
+  screens_manual_override:
+    name: "Screens Manual Override"
+    icon: mdi:hand-back-right
+
+  hcms_screen_moving:
+    name: "HCMS Screen Moving"
+    icon: mdi:window-shutter-alert
+
+################################################################################
+
+input_datetime:
+
+  last_screen_automation:
+    name: "Last Screen Automation"
+    icon: mdi:clock-outline
+    has_date: true
+    has_time: true
+
+  hcms_forecast_updated:
+    name: "HCMS Forecast Last Updated"
+    icon: mdi:weather-partly-cloudy
+    has_date: true
+    has_time: true
+
+input_number:
+
+  hcms_fc_today_max:
+    name: "HCMS FC Today Max"
+    icon: mdi:thermometer-high
+    min: -30
+    max: 50
+    step: 0.1
+    unit_of_measurement: "°C"
+
+  hcms_fc_today_min:
+    name: "HCMS FC Today Min"
+    icon: mdi:thermometer-low
+    min: -30
+    max: 50
+    step: 0.1
+    unit_of_measurement: "°C"
+
+  hcms_fc_today_precip:
+    name: "HCMS FC Today Precip"
+    icon: mdi:weather-rainy
+    min: 0
+    max: 100
+    step: 1
+    unit_of_measurement: "%"
+
+  hcms_fc_tomorrow_max:
+    name: "HCMS FC Tomorrow Max"
+    icon: mdi:thermometer-high
+    min: -30
+    max: 50
+    step: 0.1
+    unit_of_measurement: "°C"
+
+  hcms_fc_tomorrow_min:
+    name: "HCMS FC Tomorrow Min"
+    icon: mdi:thermometer-low
+    min: -30
+    max: 50
+    step: 0.1
+    unit_of_measurement: "°C"
+
+  hcms_fc_tomorrow_precip:
+    name: "HCMS FC Tomorrow Precip"
+    icon: mdi:weather-rainy
+    min: 0
+    max: 100
+    step: 1
+    unit_of_measurement: "%"
+
+  hcms_fc_night_low:
+    name: "HCMS FC Night Low"
+    icon: mdi:weather-night
+    min: -30
+    max: 50
+    step: 0.1
+    unit_of_measurement: "°C"
+
+input_text:
+
+  hcms_fc_today_condition:
+    name: "HCMS FC Today Condition"
+    icon: mdi:weather-partly-cloudy
+
+  hcms_fc_tomorrow_condition:
+    name: "HCMS FC Tomorrow Condition"
+    icon: mdi:weather-partly-cloudy
+
+  hcms_fc_tomorrow_condition_2:
+    name: "HCMS FC Tomorrow Condition 2"
+    icon: mdi:weather-partly-cloudy

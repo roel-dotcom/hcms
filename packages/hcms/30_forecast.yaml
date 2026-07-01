@@ -1,0 +1,111 @@
+################################################################################
+# HCMS - Home Climate Management System
+# Version: 0.5
+#
+# Forecast Engine
+#
+# Architecture:
+#   60_automations.yaml fetches weather.get_forecasts every 3h and stores
+#   individual values in input_number/input_text helpers.
+#   Template sensors here read directly from those helpers — no event bus,
+#   no JSON serialization, persists across restarts automatically.
+#
+# Helpers used (defined in 10_helpers.yaml):
+#   input_number.hcms_fc_today_max/min/precip
+#   input_number.hcms_fc_tomorrow_max/min/precip/night_low
+#   input_text.hcms_fc_today_condition
+#   input_text.hcms_fc_tomorrow_condition/condition_2
+#   input_datetime.hcms_forecast_updated
+################################################################################
+
+template:
+
+  - sensor:
+
+      - name: "HCMS Forecast Today Max"
+        unique_id: hcms_forecast_today_max
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state: "{{ states('input_number.hcms_fc_today_max') | float(0) }}"
+
+      - name: "HCMS Forecast Today Min"
+        unique_id: hcms_forecast_today_min
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state: "{{ states('input_number.hcms_fc_today_min') | float(0) }}"
+
+      - name: "HCMS Forecast Today Precip Prob"
+        unique_id: hcms_forecast_today_precip_prob
+        unit_of_measurement: "%"
+        state: "{{ states('input_number.hcms_fc_today_precip') | int(0) }}"
+
+      - name: "HCMS Forecast Tomorrow Max"
+        unique_id: hcms_forecast_tomorrow_max
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state: "{{ states('input_number.hcms_fc_tomorrow_max') | float(0) }}"
+        attributes:
+          condition: "{{ states('input_text.hcms_fc_tomorrow_condition') }}"
+          condition_2: "{{ states('input_text.hcms_fc_tomorrow_condition_2') }}"
+
+      - name: "HCMS Forecast Tomorrow Min"
+        unique_id: hcms_forecast_tomorrow_min
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state: "{{ states('input_number.hcms_fc_tomorrow_min') | float(0) }}"
+
+      - name: "HCMS Forecast Tomorrow Precip Prob"
+        unique_id: hcms_forecast_tomorrow_precip_prob
+        unit_of_measurement: "%"
+        state: "{{ states('input_number.hcms_fc_tomorrow_precip') | int(0) }}"
+
+      - name: "HCMS Forecast Night Low"
+        unique_id: hcms_forecast_night_low
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state: "{{ states('input_number.hcms_fc_night_low') | float(0) }}"
+
+  - binary_sensor:
+
+      - name: "HCMS Hot Day Today"
+        unique_id: hcms_hot_day_today
+        device_class: heat
+        state: >
+          {{ states('input_number.hcms_fc_today_max') | float(0)
+             >= states('input_number.hcms_hot_day_threshold') | float(28) }}
+
+      - name: "HCMS Hot Day Tomorrow"
+        unique_id: hcms_hot_day_tomorrow
+        device_class: heat
+        state: >
+          {{ states('input_number.hcms_fc_tomorrow_max') | float(0)
+             >= states('input_number.hcms_hot_day_threshold') | float(28) }}
+
+      - name: "HCMS Cool Night"
+        unique_id: hcms_cool_night
+        state: >
+          {{ states('input_number.hcms_fc_night_low') | float(99)
+             <= states('input_number.hcms_cool_night_threshold') | float(18) }}
+
+      - name: "HCMS Storm Risk Today"
+        unique_id: hcms_storm_risk_today
+        device_class: problem
+        state: >
+          {% set bad = ['lightning', 'lightning-rainy', 'hail', 'exceptional'] %}
+          {{ states('input_text.hcms_fc_today_condition') in bad }}
+
+      - name: "HCMS Storm Risk Tomorrow"
+        unique_id: hcms_storm_risk_tomorrow
+        device_class: problem
+        state: >
+          {% set bad = ['lightning', 'lightning-rainy', 'hail', 'exceptional'] %}
+          {{ states('input_text.hcms_fc_tomorrow_condition') in bad
+             or states('input_text.hcms_fc_tomorrow_condition_2') in bad }}
+
+      - name: "HCMS Precooling Recommended"
+        unique_id: hcms_precooling_recommended
+        state: >
+          {{ states('input_number.hcms_fc_tomorrow_max') | float(0)
+             >= states('input_number.hcms_hot_day_threshold') | float(28)
+             and states('input_number.hcms_fc_night_low') | float(99)
+             <= states('input_number.hcms_cool_night_threshold') | float(18) }}

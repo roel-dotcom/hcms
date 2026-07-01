@@ -1,0 +1,234 @@
+################################################################################
+# HCMS - Home Climate Management System
+# Version: 0.2
+#
+# Climate Strategy Engine
+#
+# Combines Current Conditions (20_templates.yaml) and Forecast (30_forecast.yaml)
+# into a single Climate Mode that all automations act on.
+# Nothing in this file controls hardware directly.
+#
+# Climate Mode priority order (highest to lowest):
+#   MANUAL_OVERRIDE       User has taken control
+#   HOLIDAY               House unoccupied, relaxed targets
+#   STORM_PROTECTION      Rain/storm detected — close screens, protect
+#   NIGHT_FLUSH           Night + cool outside — free pre-cooling
+#   SOLAR_PRECOOL         Solar surplus + hot day tomorrow — cool early
+#   FREE_COOLING          Outside cooler than inside — ventilate
+#   ACTIVE_COOLING        Last resort — run airco
+#   WINTER_PASSIVE        Cold outside — harvest free solar heat
+#   IDLE                  Comfort achieved, nothing to do
+#
+# Output entities:
+#   sensor.hcms_climate_mode        Active mode string
+#   sensor.hcms_climate_reason      Human-readable explanation
+#   sensor.hcms_cooling_priority    NONE / VENTILATION / AIRCO
+################################################################################
+
+template:
+
+  - sensor:
+
+      ######################################################################
+      # Climate Mode
+      # Single output that all automations read.
+      # Evaluated top-down; first matching condition wins.
+      ######################################################################
+
+      - name: "HCMS Climate Mode"
+        unique_id: hcms_climate_mode
+        icon: mdi:home-thermometer
+        state: >
+          {# ── Inputs ─────────────────────────────────────────────────── #}
+          {% set enabled      = states('input_boolean.hcms_enabled') == 'on' %}
+          {% set holiday      = states('input_boolean.hcms_holiday_mode') == 'on' %}
+          {% set indoor       = states('sensor.hcms_indoor_temperature')|float(0) %}
+          {% set outdoor      = states('sensor.ws3900a_outdoor_temperature')|float(0) %}
+          {% set target       = states('input_number.hcms_target_temperature')|float(22) %}
+          {% set needs_cool   = states('binary_sensor.hcms_needs_cooling') == 'on' %}
+          {% set needs_heat   = states('binary_sensor.hcms_needs_heating') == 'on' %}
+          {% set free_cool    = states('binary_sensor.hcms_free_cooling_possible') == 'on' %}
+          {% set surplus      = states('binary_sensor.hcms_solar_surplus') == 'on' %}
+          {% set night_flush  = states('binary_sensor.hcms_night_flush_available') == 'on' %}
+          {% set raining      = states('binary_sensor.hcms_rain_detected') == 'on' %}
+          {% set storm_today  = states('binary_sensor.hcms_storm_risk_today') == 'on' %}
+          {% set hot_tomorrow = states('binary_sensor.hcms_hot_day_tomorrow') == 'on' %}
+          {% set precool_rec  = states('binary_sensor.hcms_precooling_recommended') == 'on' %}
+          {% set hour         = now().hour %}
+          {% set night        = hour >= 22 or hour < 7 %}
+          {% set winter       = outdoor < 12 %}
+
+          {# ── Decision tree ───────────────────────────────────────────── #}
+          {% if not enabled %}
+            DISABLED
+
+          {% elif holiday %}
+            HOLIDAY
+
+          {% elif storm_today or (raining and states('binary_sensor.hcms_screens_should_close') == 'on') %}
+            STORM_PROTECTION
+
+          {% elif night_flush and needs_cool %}
+            NIGHT_FLUSH
+
+          {% elif precool_rec and surplus and needs_cool and not night %}
+            SOLAR_PRECOOL
+
+          {% elif needs_cool and free_cool %}
+            FREE_COOLING
+
+          {% elif needs_cool and not night %}
+            ACTIVE_COOLING
+
+          {% elif winter and needs_heat %}
+            WINTER_PASSIVE
+
+          {% else %}
+            IDLE
+
+          {% endif %}
+
+      ######################################################################
+      # Climate Reason
+      # Human-readable explanation for the dashboard.
+      # Mirrors the decision tree above so it's always in sync.
+      ######################################################################
+
+      - name: "HCMS Climate Reason"
+        unique_id: hcms_climate_reason
+        icon: mdi:information-outline
+        state: >
+          {% set mode = states('sensor.hcms_climate_mode') %}
+          {% set indoor   = states('sensor.hcms_indoor_temperature')|float(0) %}
+          {% set outdoor  = states('sensor.ws3900a_outdoor_temperature')|float(0) %}
+          {% set target   = states('input_number.hcms_target_temperature')|float(22) %}
+          {% set delta    = states('sensor.hcms_outdoor_delta')|float(0) %}
+          {% set tomorrow = states('sensor.hcms_forecast_tomorrow_max')|float(0) %}
+
+          {% if mode == 'DISABLED' %}
+            HCMS is disabled via master switch
+          {% elif mode == 'HOLIDAY' %}
+            Holiday mode active — relaxed comfort targets
+          {% elif mode == 'STORM_PROTECTION' %}
+            Storm or rain detected — screens protected
+          {% elif mode == 'NIGHT_FLUSH' %}
+            Night flush: {{ indoor }}°C inside, {{ outdoor }}°C outside (Δ {{ delta }}°C)
+          {% elif mode == 'SOLAR_PRECOOL' %}
+            Solar pre-cool: tomorrow {{ tomorrow }}°C, surplus available
+          {% elif mode == 'FREE_COOLING' %}
+            Free cooling: outside {{ delta }}°C cooler than inside
+          {% elif mode == 'ACTIVE_COOLING' %}
+            Active cooling: {{ indoor }}°C, target {{ target }}°C, no free alternative
+          {% elif mode == 'WINTER_PASSIVE' %}
+            Winter passive: {{ outdoor }}°C outside — harvesting solar heat
+          {% elif mode == 'IDLE' %}
+            Comfortable: {{ indoor }}°C (target {{ target }}°C)
+          {% else %}
+            Unknown mode
+          {% endif %}
+
+      ######################################################################
+      # Cooling Priority
+      # Tells the automation engine WHICH cooling method to use.
+      # Separate from Climate Mode so scripts can act without parsing strings.
+      ######################################################################
+
+      - name: "HCMS Cooling Priority"
+        unique_id: hcms_cooling_priority
+        icon: mdi:priority-high
+        state: >
+          {% set mode = states('sensor.hcms_climate_mode') %}
+          {% if mode in ['NIGHT_FLUSH', 'FREE_COOLING'] %}
+            VENTILATION
+          {% elif mode in ['SOLAR_PRECOOL', 'ACTIVE_COOLING'] %}
+            AIRCO
+          {% else %}
+            NONE
+          {% endif %}
+
+      ######################################################################
+      # Screen Recommendation
+      # CLOSE / OPEN / HOLD — scripts act on this, not raw binary sensors.
+      # HOLD = don't change current state (within cooldown window).
+      ######################################################################
+
+      - name: "HCMS Screen Recommendation"
+        unique_id: hcms_screen_recommendation
+        icon: mdi:window-shutter
+        state: >
+          {% set mode    = states('sensor.hcms_climate_mode') %}
+          {% set should_close = states('binary_sensor.hcms_screens_should_close') == 'on' %}
+          {% set should_open  = states('binary_sensor.hcms_screens_should_open') == 'on' %}
+          {% set raining      = states('binary_sensor.hcms_rain_detected') == 'on' %}
+
+          {% if mode == 'DISABLED' or mode == 'HOLIDAY' %}
+            HOLD
+          {% elif raining or mode == 'STORM_PROTECTION' %}
+            OPEN
+          {% elif mode == 'WINTER_PASSIVE' %}
+            OPEN
+          {% elif should_close and not should_open %}
+            CLOSE
+          {% elif should_open %}
+            OPEN
+          {% else %}
+            HOLD
+          {% endif %}
+
+  ##########################################################################
+  # Binary Sensors derived from strategy
+  ##########################################################################
+
+  - binary_sensor:
+
+      ######################################################################
+      # Airco Permitted
+      # Master gate: airco is never permitted at night or when disabled.
+      ######################################################################
+
+      - name: "HCMS Airco Permitted"
+        unique_id: hcms_airco_permitted
+        device_class: running
+        state: >
+          {% set hour    = now().hour %}
+          {% set night   = hour >= 22 or hour < 7 %}
+          {% set enabled = states('input_boolean.hcms_enabled') == 'on' %}
+          {% set ctrl    = states('input_boolean.hcms_airco_control') == 'on' %}
+          {% set mode    = states('sensor.hcms_climate_mode') %}
+          {{
+            enabled
+            and ctrl
+            and not night
+            and mode in ['ACTIVE_COOLING', 'SOLAR_PRECOOL']
+          }}
+
+      ######################################################################
+      # Ventilation Permitted
+      ######################################################################
+
+      - name: "HCMS Ventilation Permitted"
+        unique_id: hcms_ventilation_permitted
+        device_class: running
+        state: >
+          {% set enabled = states('input_boolean.hcms_enabled') == 'on' %}
+          {% set ctrl    = states('input_boolean.hcms_ventilation_control') == 'on' %}
+          {% set mode    = states('sensor.hcms_climate_mode') %}
+          {{
+            enabled
+            and ctrl
+            and mode in ['FREE_COOLING', 'NIGHT_FLUSH']
+          }}
+
+      ######################################################################
+      # Screens Permitted
+      ######################################################################
+
+      - name: "HCMS Screens Permitted"
+        unique_id: hcms_screens_permitted
+        state: >
+          {% set enabled = states('input_boolean.hcms_enabled') == 'on' %}
+          {% set ctrl    = states('input_boolean.hcms_screen_control') == 'on' %}
+          {{
+            enabled
+            and ctrl
+          }}

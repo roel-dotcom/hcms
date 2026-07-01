@@ -1,0 +1,324 @@
+################################################################################
+# HCMS - Home Climate Management System
+# Version: 0.3
+#
+# Scripts — Reusable Device Control
+#
+# Design principles:
+#   - Scripts never read Climate Mode — they only receive instructions
+#   - Automations decide WHAT to do; scripts decide HOW to do it
+#   - Every script is idempotent (safe to call repeatedly)
+#   - Scripts respect the hcms_enabled master switch
+#   - Minimum runtime protection lives in the automation layer (60_)
+#   - Every screen script sets hcms_screen_moving for 10s so the
+#     manual override detection automation can ignore HCMS-initiated moves
+#
+# Actuator reference:
+#   Screens:     cover.living_1, cover.living_2, cover.slaapkamer
+#                → always moved as a group
+#   Ventilation: fan.none_vmb4ry_ventilatie_sp2_ventilatie_sp2
+#                Level 1 (normal) = fan OFF
+#                Level 3 (full)   = fan ON
+#                Never off, never level 2
+#   Airco:       fan.none_vmb4ry_airco_airco  (main unit)
+#                + fan.r4_stopcontacten_vmb4ryld_airco_vent_airco_vent (duct fan)
+#                Both always activated/deactivated together
+################################################################################
+
+script:
+
+  ############################################################################
+  # SCREENS
+  ############################################################################
+
+  hcms_screens_close:
+    alias: "HCMS Screens — Close All"
+    description: >
+      Closes all three screens as a group.
+      Sets hcms_screen_moving for 10s so manual override detection
+      does not misinterpret this as a human action.
+    icon: mdi:window-shutter
+    mode: single
+    sequence:
+      - condition: state
+        entity_id: input_boolean.hcms_enabled
+        state: "on"
+      - condition: state
+        entity_id: input_boolean.hcms_screen_control
+        state: "on"
+      # Signal that HCMS is moving the screens
+      - action: input_boolean.turn_on
+        target:
+          entity_id: input_boolean.hcms_screen_moving
+      - action: cover.close_cover
+        target:
+          entity_id:
+            - cover.living_1
+            - cover.living_2
+            - cover.slaapkamer
+      - action: input_datetime.set_datetime
+        target:
+          entity_id: input_datetime.last_screen_automation
+        data:
+          datetime: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }}"
+      # Keep flag on long enough for cover state change to fire
+      - delay:
+          seconds: 45
+      - action: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.hcms_screen_moving
+
+  # ──────────────────────────────────────────────────────────────────────────
+
+  hcms_screens_open:
+    alias: "HCMS Screens — Open All"
+    description: >
+      Opens all three screens as a group.
+      Sets hcms_screen_moving for 10s so manual override detection
+      does not misinterpret this as a human action.
+    icon: mdi:window-shutter-open
+    mode: single
+    sequence:
+      - condition: state
+        entity_id: input_boolean.hcms_enabled
+        state: "on"
+      - condition: state
+        entity_id: input_boolean.hcms_screen_control
+        state: "on"
+      # Signal that HCMS is moving the screens
+      - action: input_boolean.turn_on
+        target:
+          entity_id: input_boolean.hcms_screen_moving
+      - action: cover.open_cover
+        target:
+          entity_id:
+            - cover.living_1
+            - cover.living_2
+            - cover.slaapkamer
+      - action: input_datetime.set_datetime
+        target:
+          entity_id: input_datetime.last_screen_automation
+        data:
+          datetime: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }}"
+      - delay:
+          seconds: 45
+      - action: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.hcms_screen_moving
+
+  # ──────────────────────────────────────────────────────────────────────────
+
+  hcms_screens_open_override_immune:
+    alias: "HCMS Screens — Open (Storm / Rain)"
+    description: >
+      Opens screens unconditionally — bypasses manual override.
+      Used only by storm protection where rain always wins.
+      Also sets hcms_screen_moving so it does not re-trigger override detection.
+    icon: mdi:weather-lightning-rainy
+    mode: single
+    sequence:
+      - action: input_boolean.turn_on
+        target:
+          entity_id: input_boolean.hcms_screen_moving
+      - action: cover.open_cover
+        target:
+          entity_id:
+            - cover.living_1
+            - cover.living_2
+            - cover.slaapkamer
+      - action: input_datetime.set_datetime
+        target:
+          entity_id: input_datetime.last_screen_automation
+        data:
+          datetime: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }}"
+      - delay:
+          seconds: 45
+      - action: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.hcms_screen_moving
+
+  ############################################################################
+  # VENTILATION
+  ############################################################################
+
+  hcms_ventilation_boost_on:
+    alias: "HCMS Ventilation — Boost On (Level 3)"
+    description: >
+      Activates ventilation boost = level 3 (full power).
+      The system never turns off — this only switches between L1 and L3.
+    icon: mdi:fan-chevron-up
+    mode: single
+    sequence:
+      - condition: state
+        entity_id: input_boolean.hcms_enabled
+        state: "on"
+      - condition: state
+        entity_id: input_boolean.hcms_ventilation_control
+        state: "on"
+      - action: fan.turn_on
+        target:
+          entity_id: fan.none_vmb4ry_ventilatie_sp2_ventilatie_sp2
+
+  # ──────────────────────────────────────────────────────────────────────────
+
+  hcms_ventilation_boost_off:
+    alias: "HCMS Ventilation — Boost Off (Level 1)"
+    description: >
+      Deactivates ventilation boost = back to level 1 (normal background).
+      Does NOT turn off the ventilation system.
+    icon: mdi:fan-chevron-down
+    mode: single
+    sequence:
+      - action: fan.turn_off
+        target:
+          entity_id: fan.none_vmb4ry_ventilatie_sp2_ventilatie_sp2
+
+  ############################################################################
+  # AIRCO
+  ############################################################################
+
+  hcms_airco_on:
+    alias: "HCMS Airco — On"
+    description: >
+      Starts the airco and the duct fan to bedroom together.
+      30s delay before duct fan — gives compressor time to stabilise.
+      Checks hcms_airco_permitted as a hard gate (refuses at night).
+    icon: mdi:air-conditioner
+    mode: single
+    sequence:
+      - condition: state
+        entity_id: input_boolean.hcms_enabled
+        state: "on"
+      - condition: state
+        entity_id: input_boolean.hcms_airco_control
+        state: "on"
+      - condition: state
+        entity_id: binary_sensor.hcms_airco_permitted
+        state: "on"
+      - action: fan.turn_on
+        target:
+          entity_id: fan.none_vmb4ry_airco_airco
+      - delay:
+          seconds: 30
+      - action: fan.turn_on
+        target:
+          entity_id: fan.r4_stopcontacten_vmb4ryld_airco_vent_airco_vent
+
+  # ──────────────────────────────────────────────────────────────────────────
+
+  hcms_airco_off:
+    alias: "HCMS Airco — Off"
+    description: >
+      Stops duct fan first (10s pause) then the main airco unit.
+      Avoids blowing warm air through the duct after the cold source stops.
+    icon: mdi:air-conditioner
+    mode: single
+    sequence:
+      - action: fan.turn_off
+        target:
+          entity_id: fan.r4_stopcontacten_vmb4ryld_airco_vent_airco_vent
+      - delay:
+          seconds: 10
+      - action: fan.turn_off
+        target:
+          entity_id: fan.none_vmb4ry_airco_airco
+
+  ############################################################################
+  # COMPOSITE — Climate Response
+  # Higher-level scripts called directly by automations.
+  ############################################################################
+
+  hcms_activate_free_cooling:
+    alias: "HCMS Activate Free Cooling"
+    description: >
+      Ventilation boost on. Airco off. Screens follow recommendation
+      unless manual override is active (override blocks closing only).
+    icon: mdi:fan-auto
+    mode: single
+    sequence:
+      - action: script.hcms_ventilation_boost_on
+      - action: script.hcms_airco_off
+      - choose:
+          - conditions:
+              - condition: state
+                entity_id: sensor.hcms_screen_recommendation
+                state: "CLOSE"
+              - condition: state
+                entity_id: input_boolean.screens_manual_override
+                state: "off"
+            sequence:
+              - action: script.hcms_screens_close
+          - conditions:
+              - condition: state
+                entity_id: sensor.hcms_screen_recommendation
+                state: "OPEN"
+            sequence:
+              - action: script.hcms_screens_open
+
+  # ──────────────────────────────────────────────────────────────────────────
+
+  hcms_activate_airco_cooling:
+    alias: "HCMS Activate Airco Cooling"
+    description: >
+      Airco on. Ventilation returns to level 1. Screens close if recommended
+      and no manual override is active.
+    icon: mdi:snowflake
+    mode: single
+    sequence:
+      - action: script.hcms_ventilation_boost_off
+      - action: script.hcms_airco_on
+      - choose:
+          - conditions:
+              - condition: state
+                entity_id: sensor.hcms_screen_recommendation
+                state: "CLOSE"
+              - condition: state
+                entity_id: input_boolean.screens_manual_override
+                state: "off"
+            sequence:
+              - action: script.hcms_screens_close
+
+  # ──────────────────────────────────────────────────────────────────────────
+
+  hcms_deactivate_all_cooling:
+    alias: "HCMS Deactivate All Cooling"
+    description: >
+      Returns all devices to idle state.
+      Ventilation to level 1, airco off, screens follow recommendation.
+      Override respected — will not close screens if override is active.
+    icon: mdi:check-circle-outline
+    mode: single
+    sequence:
+      - action: script.hcms_ventilation_boost_off
+      - action: script.hcms_airco_off
+      - choose:
+          - conditions:
+              - condition: state
+                entity_id: sensor.hcms_screen_recommendation
+                state: "OPEN"
+            sequence:
+              - action: script.hcms_screens_open
+          - conditions:
+              - condition: state
+                entity_id: sensor.hcms_screen_recommendation
+                state: "CLOSE"
+              - condition: state
+                entity_id: input_boolean.screens_manual_override
+                state: "off"
+            sequence:
+              - action: script.hcms_screens_close
+
+  # ──────────────────────────────────────────────────────────────────────────
+
+  hcms_storm_protection:
+    alias: "HCMS Storm Protection"
+    description: >
+      Opens all screens unconditionally (rain always wins over override).
+      Uses hcms_screens_open_override_immune — bypasses manual override.
+      Turns off airco and ventilation boost.
+    icon: mdi:weather-lightning-rainy
+    mode: single
+    sequence:
+      - action: script.hcms_screens_open_override_immune
+      - action: script.hcms_ventilation_boost_off
+      - action: script.hcms_airco_off
