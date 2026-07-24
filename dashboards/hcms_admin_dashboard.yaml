@@ -44,6 +44,9 @@ views:
 
               {{ states('sensor.hcms_climate_reason') }}
 
+
+              **{{ states('sensor.hcms_day_period') }}** ({{ state_attr('sensor.hcms_day_period', 'schedule') }} schedule)
+
       # ── Master switches ─────────────────────────────────────────────────────
       - type: entities
         title: Subsystem Switches
@@ -57,11 +60,10 @@ views:
             name: Airco Automation
           - entity: input_boolean.hcms_ventilation_control
             name: Ventilation Automation
+          - entity: input_boolean.hcms_fan_control
+            name: Ceiling Fan Automation
           - entity: input_boolean.hcms_holiday_mode
             name: Holiday Mode
-          - entity: input_boolean.screens_manual_override
-            name: Screen Manual Override
-            secondary_info: last-changed
 
       # ── Temperature overview ────────────────────────────────────────────────
       - type: glance
@@ -80,6 +82,32 @@ views:
             name: Error vs Target
           - entity: sensor.hcms_outdoor_delta
             name: Outdoor Delta
+
+      # ── Sun position ─────────────────────────────────────────────────────────
+      - type: glance
+        title: Sun Position
+        columns: 3
+        entities:
+          - entity: sensor.sun_solar_azimuth
+            name: Azimuth
+          - entity: sensor.sun_solar_elevation
+            name: Elevation
+          - entity: binary_sensor.hcms_sun_facing_windows
+            name: On Windows
+      - type: markdown
+        content: >
+          {% set az = states('sensor.sun_solar_azimuth')|float(0) %}
+          {% if az < 75 %}
+            Sun reaches windows at **75°** — currently {{ az }}°, {{ (75 - az) | round(0) }}° to go.
+
+            Estimated time: **{{ states('input_text.hcms_est_sun_reach_75') }}**
+          {% elif az <= 240 %}
+            Sun is on the windows (75°–240° range). Leaves at **240°** — currently {{ az }}°, {{ (240 - az) | round(0) }}° to go.
+
+            Estimated time: **{{ states('input_text.hcms_est_sun_leave_240') }}**
+          {% else %}
+            Sun has passed the windows for today (azimuth {{ az }}° > 240°).
+          {% endif %}
 
       # ── Key binary sensors ──────────────────────────────────────────────────
       - type: glance
@@ -138,6 +166,9 @@ views:
             name: Airco
           - entity: fan.r4_stopcontacten_vmb4ryld_airco_vent_airco_vent
             name: Duct Fan
+          - type: divider
+          - entity: fan.create_wind_calm_local_tuya
+            name: Ceiling Fan Bedroom
 
       # ── Quick script buttons ────────────────────────────────────────────────
       - type: grid
@@ -193,6 +224,18 @@ views:
             tap_action:
               action: perform-action
               perform_action: script.hcms_deactivate_all_cooling
+          - type: button
+            name: Fan On
+            icon: mdi:fan
+            tap_action:
+              action: perform-action
+              perform_action: script.hcms_fan_on
+          - type: button
+            name: Fan Off
+            icon: mdi:fan-off
+            tap_action:
+              action: perform-action
+              perform_action: script.hcms_fan_off
 
   ##############################################################################
   # VIEW 2 — SENSORS & DIAGNOSTICS
@@ -248,6 +291,9 @@ views:
                 entity: fan.none_vmb4ry_ventilatie_sp2_ventilatie_sp2
                 state: unavailable
               - condition: state
+                entity: fan.create_wind_calm_local_tuya
+                state: unavailable
+              - condition: state
                 entity: fan.r4_stopcontacten_vmb4ryld_airco_vent_airco_vent
                 state: unavailable
         card:
@@ -280,8 +326,6 @@ views:
             secondary_info: last-updated
           - entity: sensor.ws3900a_event_rain
             secondary_info: last-updated
-          - entity: sensor.hcms_net_power_balance
-            secondary_info: last-updated
           - entity: sensor.gemiddelde_productie_electriciteit_15min
             name: PV Production 15min
             secondary_info: last-updated
@@ -291,8 +335,6 @@ views:
           - entity: sensor.sun_solar_azimuth
             secondary_info: last-updated
           - entity: sensor.sun_solar_elevation
-            secondary_info: last-updated
-          - entity: sensor.hcms_net_power_balance
             secondary_info: last-updated
           - entity: sensor.hcms_temperature_error
             secondary_info: last-updated
@@ -356,6 +398,9 @@ views:
             secondary_info: last-changed
           - entity: fan.r4_stopcontacten_vmb4ryld_airco_vent_airco_vent
             secondary_info: last-changed
+          - entity: fan.create_wind_calm_local_tuya
+            name: Ceiling Fan Bedroom
+            secondary_info: last-changed
 
       # ── Temperature history graph ───────────────────────────────────────────
       - type: history-graph
@@ -399,6 +444,10 @@ views:
         entities:
           - entity: input_number.hcms_target_temperature
             name: Target Temperature
+          - entity: input_number.hcms_bedroom_weight
+            name: Bedroom Weight (Living gets rest)
+          - entity: sensor.hcms_indoor_temperature
+            name: Weighted Indoor Temp — Current
           - entity: input_number.hcms_screen_close_temperature
             name: Screen Close Temperature
           - entity: input_number.hcms_screen_open_temperature
@@ -436,6 +485,43 @@ views:
           - entity: input_number.hcms_cool_night_threshold
             name: Cool Night Threshold (°C)
 
+      # ── Day/Night schedule ──────────────────────────────────────────────────
+      - type: entities
+        title: Day/Night Schedule
+        icon: mdi:theme-light-dark
+        entities:
+          - type: section
+            label: Weekday (Mon–Fri)
+          - entity: input_datetime.hcms_weekday_start
+            name: Day Starts
+          - entity: input_datetime.hcms_weekday_end
+            name: Day Ends
+          - type: section
+            label: Weekend (Sat–Sun) & Holiday Mode
+          - entity: input_datetime.hcms_weekend_start
+            name: Day Starts
+          - entity: input_datetime.hcms_weekend_end
+            name: Day Ends
+          - type: section
+            label: Current State
+          - entity: sensor.hcms_day_period
+            name: Day Period
+          - entity: input_boolean.hcms_holiday_mode
+            name: Holiday Mode (forces weekend hours)
+
+      # ── Ceiling fan ────────────────────────────────────────────────────────
+      - type: entities
+        title: Ceiling Fan Speeds
+        icon: mdi:fan
+        entities:
+          - entity: input_number.hcms_fan_day_speed
+            name: Day Speed
+          - entity: input_number.hcms_fan_night_speed
+            name: Night Speed
+          - entity: fan.create_wind_calm_local_tuya
+            name: Ceiling Fan — Current State
+            secondary_info: last-changed
+
       # ── Internals ───────────────────────────────────────────────────────────
       - type: entities
         title: Internal State
@@ -446,4 +532,8 @@ views:
           - entity: input_boolean.hcms_screen_moving
             name: Screen Moving Flag
           - entity: input_boolean.screens_manual_override
-            name: Manual Override Active
+            name: Screen Manual Override
+          - entity: input_boolean.hcms_fan_moving
+            name: Fan Moving Flag
+          - entity: input_boolean.fan_manual_override
+            name: Fan Manual Override

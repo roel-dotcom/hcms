@@ -32,8 +32,8 @@ template:
 
       ######################################################################
       # Weighted Indoor Temperature
-      # Bedroom = 65% (primary comfort zone, hardest to cool)
-      # Living  = 35% (secondary reference)
+      # Bedroom weight configurable via input_number.hcms_bedroom_weight
+      # (default 65%). Living room takes the remainder.
       # Degrades gracefully if either sensor is unavailable.
       ######################################################################
 
@@ -45,6 +45,7 @@ template:
         state: >
           {% set bedroom = states('sensor.ws3900a_temperature_1')|float(none) %}
           {% set living  = states('sensor.ws3900a_temperature_2')|float(none) %}
+          {% set w_bed   = states('input_number.hcms_bedroom_weight')|float(65) / 100 %}
           {% if bedroom is none and living is none %}
             {{ 'unavailable' }}
           {% elif bedroom is none %}
@@ -52,7 +53,7 @@ template:
           {% elif living is none %}
             {{ bedroom | round(1) }}
           {% else %}
-            {{ (bedroom * 0.65 + living * 0.35) | round(1) }}
+            {{ (bedroom * w_bed + living * (1 - w_bed)) | round(1) }}
           {% endif %}
 
       ######################################################################
@@ -140,11 +141,45 @@ template:
             ) | round(1)
           }}
 
+      ######################################################################
+      # Day Period
+      # DAY / NIGHT based on weekday or weekend schedule.
+      # Weekend schedule also applies when hcms_holiday_mode is on.
+      ######################################################################
+
+      - name: "HCMS Day Period"
+        unique_id: hcms_day_period
+        icon: mdi:theme-light-dark
+        state: >
+          {% set is_weekend = now().weekday() >= 5 or states('input_boolean.hcms_holiday_mode') == 'on' %}
+          {% set start = states('input_datetime.hcms_weekend_start') if is_weekend else states('input_datetime.hcms_weekday_start') %}
+          {% set end   = states('input_datetime.hcms_weekend_end')   if is_weekend else states('input_datetime.hcms_weekday_end') %}
+          {% set now_t = now().strftime('%H:%M:%S') %}
+          {% if start <= now_t < end %}
+            DAY
+          {% else %}
+            NIGHT
+          {% endif %}
+        attributes:
+          schedule: >
+            {% set is_weekend = now().weekday() >= 5 or states('input_boolean.hcms_holiday_mode') == 'on' %}
+            {{ 'Weekend' if is_weekend else 'Weekday' }}
+
   ##########################################################################
   # Binary Sensors
   ##########################################################################
 
   - binary_sensor:
+
+      ######################################################################
+      # Is Daytime
+      # Convenience boolean version of HCMS Day Period.
+      ######################################################################
+
+      - name: "HCMS Is Daytime"
+        unique_id: hcms_is_daytime
+        state: >
+          {{ states('sensor.hcms_day_period') == 'DAY' }}
 
       ######################################################################
       # Needs Cooling

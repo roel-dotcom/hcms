@@ -1,0 +1,549 @@
+################################################################################
+# HCMS Logic Dashboard
+# One tab per device. Groups every setting, threshold, and sensor that
+# feeds into that device's decision — with plain-language explanation.
+# Register in configuration.yaml:
+#   lovelace:
+#     dashboards:
+#       hcms-logic:
+#         mode: yaml
+#         title: HCMS Logic
+#         icon: mdi:sitemap
+#         filename: dashboards/hcms_logic_dashboard.yaml
+#         show_in_sidebar: true
+#         require_admin: true
+################################################################################
+
+title: HCMS Logic
+views:
+
+  ##############################################################################
+  # AIRCO
+  ##############################################################################
+
+  - title: Airco
+    icon: mdi:air-conditioner
+    path: airco
+    cards:
+
+      - type: markdown
+        content: >
+          ## How the airco decision works
+
+          The airco only runs as a **last resort** — after passive measures,
+          screens, and free ventilation have been considered.
+
+          **Turns ON when ALL of these are true:**
+          - Indoor temperature is above target (Needs Cooling)
+          - It is daytime (never runs at night)
+          - Free cooling is NOT possible (outside isn't cooler than inside)
+          - Either: it's simply too warm (**ACTIVE_COOLING**), or tomorrow is
+            forecast hot AND there's solar surplus right now (**SOLAR_PRECOOL**)
+
+          **Sequence:** airco fan on → wait 30s → duct fan on (bedroom).
+          **Shutdown:** duct fan off → wait 10s → airco fan off.
+          Minimum 15 minutes runtime once started, to protect the compressor.
+
+      - type: entities
+        title: Master Switches
+        icon: mdi:toggle-switch
+        entities:
+          - entity: input_boolean.hcms_enabled
+            name: HCMS Master
+          - entity: input_boolean.hcms_airco_control
+            name: Airco Automation Enabled
+
+      - type: entities
+        title: Thresholds That Affect This Decision
+        icon: mdi:tune
+        entities:
+          - entity: input_number.hcms_target_temperature
+            name: Target Temperature
+          - entity: input_number.hcms_free_cooling_delta
+            name: Free Cooling Delta (blocks airco if met)
+          - entity: input_number.hcms_solar_surplus_threshold
+            name: Solar Surplus Threshold (for pre-cool)
+          - entity: input_number.hcms_hot_day_threshold
+            name: Hot Day Threshold (for pre-cool)
+          - entity: input_number.hcms_cool_night_threshold
+            name: Cool Night Threshold (for pre-cool)
+
+      - type: glance
+        title: Live Signals Driving This Decision
+        columns: 3
+        entities:
+          - entity: binary_sensor.hcms_needs_cooling
+            name: Needs Cooling
+          - entity: binary_sensor.hcms_free_cooling_possible
+            name: Free Cooling Possible
+          - entity: sensor.hcms_day_period
+            name: Day/Night
+          - entity: binary_sensor.hcms_solar_surplus
+            name: Solar Surplus
+          - entity: binary_sensor.hcms_precooling_recommended
+            name: Pre-cool Recommended
+          - entity: binary_sensor.hcms_airco_permitted
+            name: Airco Permitted
+
+      - type: entities
+        title: Current State
+        icon: mdi:air-conditioner
+        entities:
+          - entity: sensor.hcms_climate_mode
+            name: Climate Mode
+          - entity: fan.none_vmb4ry_airco_airco
+            name: Airco Fan
+          - entity: fan.r4_stopcontacten_vmb4ryld_airco_vent_airco_vent
+            name: Duct Fan (Bedroom)
+
+      - type: grid
+        columns: 2
+        square: false
+        cards:
+          - type: button
+            name: Airco On
+            icon: mdi:snowflake
+            tap_action:
+              action: perform-action
+              perform_action: script.hcms_airco_on
+          - type: button
+            name: Airco Off
+            icon: mdi:snowflake-off
+            tap_action:
+              action: perform-action
+              perform_action: script.hcms_airco_off
+
+  ##############################################################################
+  # SCREENS
+  ##############################################################################
+
+  - title: Screens
+    icon: mdi:window-shutter
+    path: screens
+    cards:
+
+      - type: markdown
+        content: >
+          ## How the screen decision works
+
+          Screens close to block heat, open to let light back in or to
+          protect against wind/rain.
+
+          **CLOSE when ALL of these are true:**
+          Sun is geometrically on the windows (azimuth 75°–240°, elevation
+          ≥15°) AND radiation is strong AND indoor temp is above the close
+          threshold AND it's not raining AND outdoor temp ≥ 12°C (no winter
+          heat-blocking).
+
+          **OPEN when ANY of these are true:**
+          Sun has left the window arc, OR indoor temp has dropped to the
+          open threshold, OR it's raining, OR there's a storm risk in the
+          forecast (rain/storm always win, even over manual override).
+
+          **Manual override:** if you move a screen by remote, HCMS won't
+          auto-close it again until midnight — unless it starts raining.
+
+          Re-evaluated every 15 minutes, with a cooldown between moves.
+
+      - type: entities
+        title: Master Switches
+        icon: mdi:toggle-switch
+        entities:
+          - entity: input_boolean.hcms_enabled
+            name: HCMS Master
+          - entity: input_boolean.hcms_screen_control
+            name: Screen Automation Enabled
+
+      - type: entities
+        title: Thresholds That Affect This Decision
+        icon: mdi:tune
+        entities:
+          - entity: input_number.hcms_screen_close_temperature
+            name: Close Temperature
+          - entity: input_number.hcms_screen_open_temperature
+            name: Open Temperature
+          - entity: input_number.hcms_radiation_threshold
+            name: Radiation Threshold
+          - entity: input_number.hcms_screen_cooldown
+            name: Cooldown Between Moves (min)
+
+      - type: glance
+        title: Live Signals Driving This Decision
+        columns: 3
+        entities:
+          - entity: sensor.sun_solar_azimuth
+            name: Azimuth
+          - entity: sensor.sun_solar_elevation
+            name: Elevation
+          - entity: binary_sensor.hcms_sun_facing_windows
+            name: On Windows
+          - entity: binary_sensor.hcms_strong_sun
+            name: Strong Sun
+          - entity: binary_sensor.hcms_rain_detected
+            name: Rain
+          - entity: binary_sensor.hcms_storm_risk_today
+            name: Storm Risk
+
+      - type: markdown
+        content: >
+          {% set az = states('sensor.sun_solar_azimuth')|float(0) %}
+          {% if az < 75 %}
+            Sun reaches windows at **75°** — estimated **{{ states('input_text.hcms_est_sun_reach_75') }}**
+          {% elif az <= 240 %}
+            Sun leaves windows at **240°** — estimated **{{ states('input_text.hcms_est_sun_leave_240') }}**
+          {% else %}
+            Sun has passed the windows for today.
+          {% endif %}
+
+      - type: entities
+        title: Current State
+        icon: mdi:window-shutter
+        entities:
+          - entity: sensor.hcms_screen_recommendation
+            name: Recommendation
+          - entity: input_boolean.screens_manual_override
+            name: Manual Override Active
+          - entity: cover.living_1
+            name: Screen Living 1
+          - entity: cover.living_2
+            name: Screen Living 2
+          - entity: cover.slaapkamer
+            name: Screen Bedroom
+
+      - type: grid
+        columns: 2
+        square: false
+        cards:
+          - type: button
+            name: Screens Close
+            icon: mdi:window-shutter
+            tap_action:
+              action: perform-action
+              perform_action: script.hcms_screens_close
+          - type: button
+            name: Screens Open
+            icon: mdi:window-shutter-open
+            tap_action:
+              action: perform-action
+              perform_action: script.hcms_screens_open
+
+  ##############################################################################
+  # VENTILATION
+  ##############################################################################
+
+  - title: Ventilation
+    icon: mdi:fan
+    path: ventilation
+    cards:
+
+      - type: markdown
+        content: >
+          ## How the ventilation decision works
+
+          The whole-house ventilation system never fully switches off — it
+          only toggles between Level 1 (normal background) and Level 3
+          (boost). Boost is HCMS's preferred cooling method whenever it
+          works, since it uses no extra energy beyond the fan itself.
+
+          **Boost ON (Level 3) when:**
+          - **FREE_COOLING** mode: needs cooling AND outside is cooler than
+            inside by at least the free cooling delta
+          - **NIGHT_FLUSH** mode: it's night AND outside is cooler than
+            inside by at least the night flush delta (a bigger margin,
+            since flushing overnight pre-cools the house for tomorrow)
+
+          **Back to Level 1** the moment cooling is no longer needed or
+          free cooling is no longer possible — the airco then takes over
+          if cooling is still required.
+
+      - type: entities
+        title: Master Switches
+        icon: mdi:toggle-switch
+        entities:
+          - entity: input_boolean.hcms_enabled
+            name: HCMS Master
+          - entity: input_boolean.hcms_ventilation_control
+            name: Ventilation Automation Enabled
+
+      - type: entities
+        title: Thresholds That Affect This Decision
+        icon: mdi:tune
+        entities:
+          - entity: input_number.hcms_free_cooling_delta
+            name: Free Cooling Delta
+          - entity: input_number.hcms_night_flush_delta
+            name: Night Flush Delta
+
+      - type: glance
+        title: Live Signals Driving This Decision
+        columns: 3
+        entities:
+          - entity: binary_sensor.hcms_needs_cooling
+            name: Needs Cooling
+          - entity: binary_sensor.hcms_free_cooling_possible
+            name: Free Cooling Possible
+          - entity: binary_sensor.hcms_night_flush_available
+            name: Night Flush Available
+          - entity: sensor.hcms_outdoor_delta
+            name: Outdoor Delta
+          - entity: sensor.hcms_day_period
+            name: Day/Night
+          - entity: binary_sensor.hcms_ventilation_permitted
+            name: Ventilation Permitted
+
+      - type: entities
+        title: Current State
+        icon: mdi:fan
+        entities:
+          - entity: sensor.hcms_climate_mode
+            name: Climate Mode
+          - entity: sensor.hcms_cooling_priority
+            name: Cooling Priority
+          - entity: fan.none_vmb4ry_ventilatie_sp2_ventilatie_sp2
+            name: Ventilation Fan
+
+      - type: grid
+        columns: 2
+        square: false
+        cards:
+          - type: button
+            name: Boost On
+            icon: mdi:fan-chevron-up
+            tap_action:
+              action: perform-action
+              perform_action: script.hcms_ventilation_boost_on
+          - type: button
+            name: Boost Off
+            icon: mdi:fan-chevron-down
+            tap_action:
+              action: perform-action
+              perform_action: script.hcms_ventilation_boost_off
+
+  ##############################################################################
+  # CEILING FAN
+  ##############################################################################
+
+  - title: Ceiling Fan
+    icon: mdi:fan
+    path: ceiling-fan
+    cards:
+
+      - type: markdown
+        content: >
+          ## How the ceiling fan decision works
+
+          Simplest device in the system — one condition, two speeds.
+
+          **Turns ON whenever indoor temperature is above target** (the
+          same Needs Cooling signal used for airco/ventilation). Runs
+          alongside whatever else is cooling the house — it doesn't wait
+          its turn.
+
+          **Speed depends on time of day:**
+          Day speed (default 100%) applies during the day period, night
+          speed (default 30%, quieter for sleeping) applies at night —
+          using the same Day/Night schedule as the rest of HCMS, which
+          shifts automatically on weekends and holiday mode.
+
+          **Turns OFF** the moment indoor temperature drops back to target.
+
+          **Manual override:** if you change the fan via the Tuya app or a
+          physical remote, HCMS won't touch it again until midnight.
+
+      - type: entities
+        title: Master Switches
+        icon: mdi:toggle-switch
+        entities:
+          - entity: input_boolean.hcms_enabled
+            name: HCMS Master
+          - entity: input_boolean.hcms_fan_control
+            name: Ceiling Fan Automation Enabled
+
+      - type: entities
+        title: Thresholds That Affect This Decision
+        icon: mdi:tune
+        entities:
+          - entity: input_number.hcms_target_temperature
+            name: Target Temperature
+          - entity: input_number.hcms_fan_day_speed
+            name: Day Speed
+          - entity: input_number.hcms_fan_night_speed
+            name: Night Speed
+
+      - type: glance
+        title: Live Signals Driving This Decision
+        columns: 2
+        entities:
+          - entity: binary_sensor.hcms_needs_cooling
+            name: Needs Cooling
+          - entity: sensor.hcms_day_period
+            name: Day/Night
+
+      - type: entities
+        title: Current State
+        icon: mdi:fan
+        entities:
+          - entity: fan.create_wind_calm_local_tuya
+            name: Ceiling Fan
+          - entity: input_boolean.fan_manual_override
+            name: Manual Override Active
+
+      - type: grid
+        columns: 2
+        square: false
+        cards:
+          - type: button
+            name: Fan On
+            icon: mdi:fan
+            tap_action:
+              action: perform-action
+              perform_action: script.hcms_fan_on
+          - type: button
+            name: Fan Off
+            icon: mdi:fan-off
+            tap_action:
+              action: perform-action
+              perform_action: script.hcms_fan_off
+
+  ##############################################################################
+  # SHARED INPUTS (Forecast, Solar, Day/Night)
+  ##############################################################################
+
+  - title: Shared Inputs
+    icon: mdi:share-variant
+    path: shared
+    cards:
+
+      - type: markdown
+        content: >
+          ## Settings that affect multiple devices
+
+          These aren't tied to one device — they feed the forecast engine
+          and the strategy layer, which multiple devices react to.
+
+      - type: entities
+        title: Indoor Temperature Weighting
+        icon: mdi:thermometer
+        entities:
+          - entity: input_number.hcms_bedroom_weight
+            name: Bedroom Weight (Living gets rest)
+          - entity: sensor.hcms_indoor_temperature
+            name: Weighted Indoor Temp — Current
+          - entity: sensor.ws3900a_temperature_1
+            name: Bedroom (raw)
+          - entity: sensor.ws3900a_temperature_2
+            name: Living (raw)
+
+      - type: entities
+        title: Day/Night Schedule
+        icon: mdi:theme-light-dark
+        entities:
+          - entity: sensor.hcms_day_period
+            name: Current Period
+          - entity: input_datetime.hcms_weekday_start
+            name: Weekday Start
+          - entity: input_datetime.hcms_weekday_end
+            name: Weekday End
+          - entity: input_datetime.hcms_weekend_start
+            name: Weekend Start
+          - entity: input_datetime.hcms_weekend_end
+            name: Weekend End
+          - entity: input_boolean.hcms_holiday_mode
+            name: Holiday Mode (forces weekend hours)
+
+      - type: entities
+        title: Forecast (affects Pre-cool & Night Flush)
+        icon: mdi:weather-partly-cloudy
+        entities:
+          - entity: sensor.hcms_forecast_today_max
+            name: Today Max
+          - entity: sensor.hcms_forecast_tomorrow_max
+            name: Tomorrow Max
+          - entity: sensor.hcms_forecast_night_low
+            name: Tonight's Low
+          - entity: binary_sensor.hcms_hot_day_tomorrow
+            name: Hot Day Tomorrow
+          - entity: binary_sensor.hcms_cool_night
+            name: Cool Night
+          - entity: input_datetime.hcms_forecast_updated
+            name: Last Updated
+
+      - type: entities
+        title: Solar Production
+        icon: mdi:solar-power
+        entities:
+          - entity: sensor.hcms_net_power_balance
+            name: Net Power Balance
+          - entity: binary_sensor.hcms_solar_surplus
+            name: Solar Surplus Active
+
+  ##############################################################################
+  # AT A GLANCE
+  # Colored icon = active, grey icon = inactive. One look tells you what's
+  # currently running.
+  ##############################################################################
+
+  - title: At a Glance
+    icon: mdi:eye
+    path: glance
+    cards:
+
+      - type: markdown
+        content: >
+          ## Current State
+          Colored icon = active right now. Grey icon = off.
+
+      - type: grid
+        columns: 2
+        square: false
+        cards:
+
+          - type: tile
+            entity: fan.none_vmb4ry_airco_airco
+            name: Airco
+            icon: mdi:air-conditioner
+            color: blue
+            vertical: true
+
+          - type: tile
+            entity: fan.r4_stopcontacten_vmb4ryld_airco_vent_airco_vent
+            name: Duct Fan
+            icon: mdi:air-filter
+            color: light-blue
+            vertical: true
+
+          - type: tile
+            entity: cover.living_1
+            name: Screens
+            icon: mdi:window-shutter
+            color: amber
+            vertical: true
+
+          - type: tile
+            entity: fan.none_vmb4ry_ventilatie_sp2_ventilatie_sp2
+            name: Ventilation Boost
+            icon: mdi:fan
+            color: cyan
+            vertical: true
+
+          - type: tile
+            entity: fan.create_wind_calm_local_tuya
+            name: Ceiling Fan
+            icon: mdi:ceiling-fan
+            color: green
+            vertical: true
+
+          - type: tile
+            entity: input_boolean.hcms_enabled
+            name: HCMS Master
+            icon: mdi:home-automation
+            color: purple
+            vertical: true
+
+      - type: markdown
+        content: >
+          **Screens tile** reflects `cover.living_1` — all three screens
+          always move together, so this represents all of them.
+
+          **Mode:** {{ states('sensor.hcms_climate_mode') }} —
+          {{ states('sensor.hcms_climate_reason') }}

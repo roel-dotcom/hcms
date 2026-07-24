@@ -1,13 +1,15 @@
 ################################################################################
 # HCMS - Home Climate Management System
-# Version: 0.3
+# Version: 0.5
 #
-# Helpers — All input_number, input_boolean, input_datetime
+# Helpers — All input_number, input_boolean, input_datetime, input_text
 #
 # Changelog:
-#   0.1  Initial helpers (ChatGPT session)
-#   0.2  Added hcms_hot_day_threshold, hcms_cool_night_threshold (30_forecast)
+#   0.1  Initial helpers
+#   0.2  Added hcms_hot_day_threshold, hcms_cool_night_threshold
 #   0.3  Added hcms_screen_moving flag for manual override detection
+#   0.4  Added forecast storage helpers (fc_today/tomorrow/night_low)
+#   0.5  Added ceiling fan speed helpers (fan_day_speed, fan_night_speed)
 ################################################################################
 
 input_number:
@@ -101,7 +103,7 @@ input_number:
     initial: 25000
     unit_of_measurement: "lx"
 
-  # ── Forecast ───────────────────────────────────────────────────────────────
+  # ── Forecast thresholds ────────────────────────────────────────────────────
 
   hcms_hot_day_threshold:
     name: "HCMS Hot Day Threshold"
@@ -121,65 +123,47 @@ input_number:
     initial: 18
     unit_of_measurement: "°C"
 
-################################################################################
+  # ── Ceiling fan ────────────────────────────────────────────────────────────
 
-input_boolean:
-
-  # ── Master switches ────────────────────────────────────────────────────────
-
-  hcms_enabled:
-    name: "HCMS Enabled"
-    icon: mdi:home-automation
-
-  hcms_screen_control:
-    name: "Screen Automation Enabled"
-    icon: mdi:window-shutter
-
-  hcms_airco_control:
-    name: "Airco Automation Enabled"
-    icon: mdi:air-conditioner
-
-  hcms_ventilation_control:
-    name: "Ventilation Automation Enabled"
+  hcms_fan_day_speed:
+    name: "HCMS Ceiling Fan Day Speed"
     icon: mdi:fan
+    min: 16.67
+    max: 100
+    step: 16.67
+    initial: 100
+    unit_of_measurement: "%"
 
-  # ── Modes ──────────────────────────────────────────────────────────────────
+  hcms_fan_night_speed:
+    name: "HCMS Ceiling Fan Night Speed"
+    icon: mdi:fan
+    min: 16.67
+    max: 50
+    step: 16.67
+    initial: 33.34
+    unit_of_measurement: "%"
 
-  hcms_learning_mode:
-    name: "Learning Mode"
-    icon: mdi:brain
+  # ── Indoor temperature weighting ────────────────────────────────────────────
 
-  hcms_holiday_mode:
-    name: "Holiday Mode"
-    icon: mdi:beach
+  hcms_bedroom_weight:
+    name: "HCMS Bedroom Weight"
+    icon: mdi:bed
+    min: 0
+    max: 100
+    step: 5
+    initial: 65
+    unit_of_measurement: "%"
 
-  # ── Screen override & movement flag ───────────────────────────────────────
+  # ── Azimuth rate tracking (for estimated threshold crossing times) ─────────
 
-  screens_manual_override:
-    name: "Screens Manual Override"
-    icon: mdi:hand-back-right
+  hcms_prev_azimuth:
+    name: "HCMS Previous Azimuth"
+    icon: mdi:compass
+    min: 0
+    max: 360
+    step: 0.01
 
-  hcms_screen_moving:
-    name: "HCMS Screen Moving"
-    icon: mdi:window-shutter-alert
-
-################################################################################
-
-input_datetime:
-
-  last_screen_automation:
-    name: "Last Screen Automation"
-    icon: mdi:clock-outline
-    has_date: true
-    has_time: true
-
-  hcms_forecast_updated:
-    name: "HCMS Forecast Last Updated"
-    icon: mdi:weather-partly-cloudy
-    has_date: true
-    has_time: true
-
-input_number:
+  # ── Forecast storage (written by hcms_forecast_refresh automation) ─────────
 
   hcms_fc_today_max:
     name: "HCMS FC Today Max"
@@ -237,6 +221,118 @@ input_number:
     step: 0.1
     unit_of_measurement: "°C"
 
+################################################################################
+
+input_boolean:
+
+  # ── Master switches ────────────────────────────────────────────────────────
+
+  hcms_enabled:
+    name: "HCMS Enabled"
+    icon: mdi:home-automation
+
+  hcms_screen_control:
+    name: "Screen Automation Enabled"
+    icon: mdi:window-shutter
+
+  hcms_airco_control:
+    name: "Airco Automation Enabled"
+    icon: mdi:air-conditioner
+
+  hcms_ventilation_control:
+    name: "Ventilation Automation Enabled"
+    icon: mdi:fan
+
+  hcms_fan_control:
+    name: "Ceiling Fan Automation Enabled"
+    icon: mdi:fan
+
+  # ── Modes ──────────────────────────────────────────────────────────────────
+
+  hcms_learning_mode:
+    name: "Learning Mode"
+    icon: mdi:brain
+
+  hcms_holiday_mode:
+    name: "Holiday Mode"
+    icon: mdi:beach
+
+  # ── Screen override & movement flag ───────────────────────────────────────
+
+  screens_manual_override:
+    name: "Screens Manual Override"
+    icon: mdi:hand-back-right
+
+  hcms_screen_moving:
+    name: "HCMS Screen Moving"
+    icon: mdi:window-shutter-alert
+
+  # ── Ceiling fan override & movement flag ──────────────────────────────────
+
+  fan_manual_override:
+    name: "Ceiling Fan Manual Override"
+    icon: mdi:hand-back-right
+
+  hcms_fan_moving:
+    name: "HCMS Fan Moving"
+    icon: mdi:fan-alert
+
+################################################################################
+
+input_datetime:
+
+  last_screen_automation:
+    name: "Last Screen Automation"
+    icon: mdi:clock-outline
+    has_date: true
+    has_time: true
+
+  hcms_forecast_updated:
+    name: "HCMS Forecast Last Updated"
+    icon: mdi:weather-partly-cloudy
+    has_date: true
+    has_time: true
+
+  # ── Day/Night schedule ─────────────────────────────────────────────────────
+  # Weekday hours apply Mon–Fri. Weekend hours apply Sat–Sun automatically,
+  # and also on any day when hcms_holiday_mode is on.
+
+  hcms_weekday_start:
+    name: "HCMS Weekday Start"
+    icon: mdi:weather-sunset-up
+    has_time: true
+    has_date: false
+    initial: "07:00:00"
+
+  hcms_weekday_end:
+    name: "HCMS Weekday End"
+    icon: mdi:weather-sunset-down
+    has_time: true
+    has_date: false
+    initial: "22:00:00"
+
+  hcms_weekend_start:
+    name: "HCMS Weekend Start"
+    icon: mdi:weather-sunset-up
+    has_time: true
+    has_date: false
+    initial: "09:00:00"
+
+  hcms_weekend_end:
+    name: "HCMS Weekend End"
+    icon: mdi:weather-sunset-down
+    has_time: true
+    has_date: false
+    initial: "23:00:00"
+
+  hcms_prev_azimuth_time:
+    name: "HCMS Previous Azimuth Time"
+    icon: mdi:clock-outline
+    has_date: true
+    has_time: true
+
+################################################################################
+
 input_text:
 
   hcms_fc_today_condition:
@@ -250,3 +346,11 @@ input_text:
   hcms_fc_tomorrow_condition_2:
     name: "HCMS FC Tomorrow Condition 2"
     icon: mdi:weather-partly-cloudy
+
+  hcms_est_sun_reach_75:
+    name: "HCMS Estimated Sun Reaches Windows"
+    icon: mdi:clock-start
+
+  hcms_est_sun_leave_240:
+    name: "HCMS Estimated Sun Leaves Windows"
+    icon: mdi:clock-end

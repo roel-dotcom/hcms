@@ -90,6 +90,8 @@ views:
             name: Buiten
           - entity: sensor.hcms_climate_mode
             name: Modus
+          - entity: sensor.hcms_day_period
+            name: Dag/Nacht
           - entity: binary_sensor.hcms_rain_detected
             name: Regen
           - entity: binary_sensor.hcms_solar_surplus
@@ -123,6 +125,22 @@ views:
             name: Morgen min
           - entity: binary_sensor.hcms_precooling_recommended
             name: Pre-koelen?
+
+      # ── Zonnestand ──────────────────────────────────────────────────────────
+      - type: markdown
+        content: >
+          {% set az = states('sensor.sun_solar_azimuth')|float(0) %}
+          {% if az < 75 %}
+            ☀️ Zon bereikt de ramen bij 75° — nu {{ az }}°.
+
+            Verwacht rond **{{ states('input_text.hcms_est_sun_reach_75') }}**
+          {% elif az <= 240 %}
+            ☀️ Zon schijnt op de ramen. Verdwijnt bij 240° — nog {{ (240 - az) | round(0) }}°.
+
+            Verwacht rond **{{ states('input_text.hcms_est_sun_leave_240') }}**
+          {% else %}
+            🌤️ Zon is voorbij de ramen voor vandaag.
+          {% endif %}
 
       # ── Screens ─────────────────────────────────────────────────────────────
       - type: entities
