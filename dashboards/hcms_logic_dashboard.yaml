@@ -540,6 +540,20 @@ views:
             color: purple
             vertical: true
 
+          - type: tile
+            entity: sensor.ws3900a_temperature_1
+            name: Bedroom Temp
+            icon: mdi:thermometer
+            color: red
+            vertical: true
+
+          - type: tile
+            entity: sensor.ws3900a_outdoor_temperature
+            name: Outside Temp
+            icon: mdi:thermometer
+            color: teal
+            vertical: true
+
       - type: markdown
         content: >
           **Screens tile** reflects `cover.living_1` — all three screens
