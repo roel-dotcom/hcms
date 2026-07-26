@@ -309,8 +309,10 @@ automation:
     description: >
       Turns fan on when cooling is needed.
       Also fires when HCMS Day Period changes (day/night boundary, which
-      shifts automatically on weekends), and at startup / HCMS enable
-      to catch already-hot conditions.
+      shifts automatically on weekends), at startup / HCMS enable to catch
+      already-hot conditions, and when the day/night speed sliders change
+      so a running fan picks up the new speed immediately instead of
+      waiting for the next day/night boundary.
     mode: restart
     triggers:
       - trigger: state
@@ -323,6 +325,10 @@ automation:
       - trigger: state
         entity_id: input_boolean.hcms_enabled
         to: "on"
+      - trigger: state
+        entity_id: input_number.hcms_fan_day_speed
+      - trigger: state
+        entity_id: input_number.hcms_fan_night_speed
     conditions:
       - condition: state
         entity_id: input_boolean.hcms_enabled

@@ -131,7 +131,6 @@ input_number:
     min: 16.67
     max: 100
     step: 16.67
-    initial: 100
     unit_of_measurement: "%"
 
   hcms_fan_night_speed:
@@ -140,7 +139,6 @@ input_number:
     min: 16.67
     max: 50
     step: 16.67
-    initial: 33.34
     unit_of_measurement: "%"
 
   # ── Indoor temperature weighting ────────────────────────────────────────────
