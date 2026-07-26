@@ -1,6 +1,6 @@
 ################################################################################
 # HCMS - Home Climate Management System
-# Version: 0.5
+# Version: 0.6
 #
 # Helpers — All input_number, input_boolean, input_datetime, input_text
 #
@@ -10,6 +10,11 @@
 #   0.3  Added hcms_screen_moving flag for manual override detection
 #   0.4  Added forecast storage helpers (fc_today/tomorrow/night_low)
 #   0.5  Added ceiling fan speed helpers (fan_day_speed, fan_night_speed)
+#   0.6  Removed `initial:` from every input_number/input_datetime that had
+#        one — Home Assistant's RestoreEntity skips restoring the last-set
+#        value entirely whenever `initial` is configured, so every restart
+#        was silently reverting these to their hardcoded default instead of
+#        whatever the user had set (found via the ceiling fan speed bug).
 ################################################################################
 
 input_number:
@@ -22,7 +27,6 @@ input_number:
     min: 18
     max: 26
     step: 0.5
-    initial: 22
     unit_of_measurement: "°C"
 
   # ── Screens ────────────────────────────────────────────────────────────────
@@ -33,7 +37,6 @@ input_number:
     min: 18
     max: 30
     step: 0.5
-    initial: 22
     unit_of_measurement: "°C"
 
   hcms_screen_open_temperature:
@@ -42,7 +45,6 @@ input_number:
     min: 18
     max: 30
     step: 0.5
-    initial: 21.5
     unit_of_measurement: "°C"
 
   hcms_screen_cooldown:
@@ -51,7 +53,6 @@ input_number:
     min: 5
     max: 120
     step: 5
-    initial: 15
     unit_of_measurement: "min"
 
   # ── Ventilation / Cooling ──────────────────────────────────────────────────
@@ -62,7 +63,6 @@ input_number:
     min: 0.5
     max: 5
     step: 0.5
-    initial: 1
     unit_of_measurement: "°C"
 
   hcms_night_flush_delta:
@@ -71,7 +71,6 @@ input_number:
     min: 1
     max: 5
     step: 0.5
-    initial: 2
     unit_of_measurement: "°C"
 
   # ── Solar ──────────────────────────────────────────────────────────────────
@@ -82,7 +81,6 @@ input_number:
     min: 500
     max: 6000
     step: 100
-    initial: 1500
     unit_of_measurement: "W"
 
   hcms_radiation_threshold:
@@ -91,7 +89,6 @@ input_number:
     min: 100
     max: 1000
     step: 25
-    initial: 200
     unit_of_measurement: "W/m²"
 
   hcms_lux_threshold:
@@ -100,7 +97,6 @@ input_number:
     min: 5000
     max: 100000
     step: 1000
-    initial: 25000
     unit_of_measurement: "lx"
 
   # ── Forecast thresholds ────────────────────────────────────────────────────
@@ -111,7 +107,6 @@ input_number:
     min: 22
     max: 38
     step: 0.5
-    initial: 28
     unit_of_measurement: "°C"
 
   hcms_cool_night_threshold:
@@ -120,7 +115,6 @@ input_number:
     min: 10
     max: 22
     step: 0.5
-    initial: 18
     unit_of_measurement: "°C"
 
   # ── Ceiling fan ────────────────────────────────────────────────────────────
@@ -149,7 +143,6 @@ input_number:
     min: 0
     max: 100
     step: 5
-    initial: 65
     unit_of_measurement: "%"
 
   # ── Azimuth rate tracking (for estimated threshold crossing times) ─────────
@@ -300,28 +293,24 @@ input_datetime:
     icon: mdi:weather-sunset-up
     has_time: true
     has_date: false
-    initial: "07:00:00"
 
   hcms_weekday_end:
     name: "HCMS Weekday End"
     icon: mdi:weather-sunset-down
     has_time: true
     has_date: false
-    initial: "22:00:00"
 
   hcms_weekend_start:
     name: "HCMS Weekend Start"
     icon: mdi:weather-sunset-up
     has_time: true
     has_date: false
-    initial: "09:00:00"
 
   hcms_weekend_end:
     name: "HCMS Weekend End"
     icon: mdi:weather-sunset-down
     has_time: true
     has_date: false
-    initial: "23:00:00"
 
   hcms_prev_azimuth_time:
     name: "HCMS Previous Azimuth Time"
