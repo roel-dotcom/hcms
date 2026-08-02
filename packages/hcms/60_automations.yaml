@@ -1,8 +1,13 @@
 ################################################################################
 # HCMS - Home Climate Management System
-# Version: 0.6
+# Version: 0.7
 #
 # Automation Engine
+#
+# Changelog v0.7:
+#   - Ceiling fan now runs continuously through the NIGHT period regardless
+#     of needs_cooling (sleeping comfort, not active cooling — night speed
+#     is already a gentle 30%). needs_cooling still gates the fan during DAY.
 #
 # Changelog v0.6:
 #   - Removed incorrect ventilation runtime check from ACTIVE_COOLING transition
@@ -307,7 +312,10 @@ automation:
   - id: hcms_fan_cooling_on
     alias: "HCMS Ceiling Fan — Start Cooling"
     description: >
-      Turns fan on when cooling is needed.
+      Turns fan on when cooling is needed, or unconditionally during the
+      NIGHT period (comfort airflow for sleeping — night speed is already
+      a gentle 30%, not aggressive cooling, so it doesn't need a cooling
+      call to justify running).
       Also fires when HCMS Day Period changes (day/night boundary, which
       shifts automatically on weekends), at startup / HCMS enable to catch
       already-hot conditions, and when the day/night speed sliders change
@@ -333,23 +341,41 @@ automation:
       - condition: state
         entity_id: input_boolean.hcms_enabled
         state: "on"
-      - condition: state
-        entity_id: binary_sensor.hcms_needs_cooling
-        state: "on"
+      - condition: or
+        conditions:
+          - condition: state
+            entity_id: binary_sensor.hcms_needs_cooling
+            state: "on"
+          - condition: state
+            entity_id: sensor.hcms_day_period
+            state: "NIGHT"
     actions:
       - action: script.hcms_fan_on
 
   - id: hcms_fan_cooling_off
     alias: "HCMS Ceiling Fan — Stop Cooling"
-    description: Turns fan off when indoor temperature drops back to target.
+    description: >
+      Turns fan off during the DAY period once indoor temperature drops
+      back to target. Excludes NIGHT — the fan runs continuously overnight
+      for sleeping comfort regardless of active cooling need. Also fires on
+      the day/night boundary itself, to stop a fan left running from the
+      night once DAY starts with no cooling need.
     triggers:
       - trigger: state
         entity_id: binary_sensor.hcms_needs_cooling
         to: "off"
+      - trigger: state
+        entity_id: sensor.hcms_day_period
     conditions:
       - condition: state
         entity_id: input_boolean.hcms_enabled
         state: "on"
+      - condition: state
+        entity_id: sensor.hcms_day_period
+        state: "DAY"
+      - condition: state
+        entity_id: binary_sensor.hcms_needs_cooling
+        state: "off"
     actions:
       - action: script.hcms_fan_off
 
