@@ -165,6 +165,33 @@ template:
             {% set is_weekend = now().weekday() >= 5 or states('input_boolean.hcms_holiday_mode') == 'on' %}
             {{ 'Weekend' if is_weekend else 'Weekday' }}
 
+      ######################################################################
+      # Screen Target Position
+      # Graduated close position instead of a binary open/closed.
+      # 0 = fully closed, 100 = fully open (standard HA cover convention).
+      # While should_close is on, the further the sun sits from
+      # perpendicular (the centre of the 75-240° window-facing arc), the
+      # less closure is needed — grazing sun near the 75°/240° edges only
+      # closes to hcms_screen_min_close_position, direct sun at the
+      # centre (157.5°) closes fully. hcms_screens_close reads this value
+      # directly, so no caller needs to know about it.
+      ######################################################################
+
+      - name: "HCMS Screen Target Position"
+        unique_id: hcms_screen_target_position
+        unit_of_measurement: "%"
+        state: >
+          {% if states('binary_sensor.hcms_screens_should_close') != 'on' %}
+            100
+          {% else %}
+            {% set az = states('sensor.sun_solar_azimuth')|float(157.5) %}
+            {% set center = 157.5 %}
+            {% set half_range = 82.5 %}
+            {% set obliqueness = [((az - center) | abs / half_range), 1] | min %}
+            {% set min_close = states('input_number.hcms_screen_min_close_position')|float(30) %}
+            {{ (obliqueness * min_close) | round(0) }}
+          {% endif %}
+
   ##########################################################################
   # Binary Sensors
   ##########################################################################

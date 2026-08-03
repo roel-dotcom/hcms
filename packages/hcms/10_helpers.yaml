@@ -55,6 +55,14 @@ input_number:
     step: 5
     unit_of_measurement: "min"
 
+  hcms_screen_min_close_position:
+    name: "HCMS Screen Min Close Position"
+    icon: mdi:window-shutter
+    min: 0
+    max: 80
+    step: 5
+    unit_of_measurement: "%"
+
   # ── Ventilation / Cooling ──────────────────────────────────────────────────
 
   hcms_free_cooling_delta:

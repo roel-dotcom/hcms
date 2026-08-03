@@ -1,8 +1,20 @@
 ################################################################################
 # HCMS - Home Climate Management System
-# Version: 0.5
+# Version: 0.6
 #
 # Scripts — Reusable Device Control
+#
+# Changelog v0.6:
+#   - Screens migrated from the HomeKit-relayed cover entities
+#     (cover.living_1/living_2/slaapkamer) to the native Overkiz ones
+#     (cover.screen_3/screen_2/screen_1) now that the TaHoma Switch runs
+#     on the Local API — same physical screens, richer entities (position,
+#     RSSI, priority-lock), no cloud round-trip. The HomeKit duplicates are
+#     being removed from the registry.
+#   - hcms_screens_close now closes to a graduated position from
+#     sensor.hcms_screen_target_position instead of always fully closing —
+#     see 20_templates.yaml. Storm/rain opening is unaffected (full open,
+#     safety-driven, unchanged).
 #
 # Design principles:
 #   - Scripts never read Climate Mode — only receive instructions
@@ -13,7 +25,8 @@
 #     so override detection does not misinterpret HCMS moves as human actions
 #
 # Actuators:
-#   Screens:     cover.living_1, cover.living_2, cover.slaapkamer (always grouped)
+#   Screens:     cover.screen_1 (bedroom), cover.screen_2, cover.screen_3
+#                (living room) — native Overkiz, always grouped
 #   Ventilation: fan.none_vmb4ry_ventilatie_sp2_ventilatie_sp2
 #                On = Level 3 (boost), Off = Level 1 (normal). Never fully off.
 #   Airco:       fan.none_vmb4ry_airco_airco + duct fan always paired
@@ -33,8 +46,10 @@ script:
   hcms_screens_close:
     alias: "HCMS Screens — Close All"
     description: >
-      Closes all three screens as a group.
-      Sets hcms_screen_moving for 45s to prevent false override detection.
+      Closes all three screens as a group, to the graduated position in
+      sensor.hcms_screen_target_position (0 = fully closed, 100 = open) —
+      not always fully closed. Sets hcms_screen_moving for 45s to prevent
+      false override detection.
     icon: mdi:window-shutter
     mode: single
     sequence:
@@ -47,12 +62,14 @@ script:
       - action: input_boolean.turn_on
         target:
           entity_id: input_boolean.hcms_screen_moving
-      - action: cover.close_cover
+      - action: cover.set_cover_position
         target:
           entity_id:
-            - cover.living_1
-            - cover.living_2
-            - cover.slaapkamer
+            - cover.screen_1
+            - cover.screen_2
+            - cover.screen_3
+        data:
+          position: "{{ states('sensor.hcms_screen_target_position')|int(0) }}"
       - action: input_datetime.set_datetime
         target:
           entity_id: input_datetime.last_screen_automation
@@ -84,9 +101,9 @@ script:
       - action: cover.open_cover
         target:
           entity_id:
-            - cover.living_1
-            - cover.living_2
-            - cover.slaapkamer
+            - cover.screen_1
+            - cover.screen_2
+            - cover.screen_3
       - action: input_datetime.set_datetime
         target:
           entity_id: input_datetime.last_screen_automation
@@ -112,9 +129,9 @@ script:
       - action: cover.open_cover
         target:
           entity_id:
-            - cover.living_1
-            - cover.living_2
-            - cover.slaapkamer
+            - cover.screen_1
+            - cover.screen_2
+            - cover.screen_3
       - action: input_datetime.set_datetime
         target:
           entity_id: input_datetime.last_screen_automation

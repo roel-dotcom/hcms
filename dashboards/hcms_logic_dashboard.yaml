@@ -203,11 +203,11 @@ views:
             name: Recommendation
           - entity: input_boolean.screens_manual_override
             name: Manual Override Active
-          - entity: cover.living_1
+          - entity: cover.screen_3
             name: Screen Living 1
-          - entity: cover.living_2
+          - entity: cover.screen_2
             name: Screen Living 2
-          - entity: cover.slaapkamer
+          - entity: cover.screen_1
             name: Screen Bedroom
 
       - type: grid
@@ -513,7 +513,7 @@ views:
             vertical: true
 
           - type: tile
-            entity: cover.living_1
+            entity: cover.screen_3
             name: Screens
             icon: mdi:window-shutter
             color: amber
@@ -556,7 +556,7 @@ views:
 
       - type: markdown
         content: >
-          **Screens tile** reflects `cover.living_1` — all three screens
+          **Screens tile** reflects `cover.screen_3` — all three screens
           always move together, so this represents all of them.
 
           **Mode:** {{ states('sensor.hcms_climate_mode') }} —

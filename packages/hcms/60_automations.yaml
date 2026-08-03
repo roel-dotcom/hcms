@@ -127,9 +127,9 @@ automation:
     triggers:
       - trigger: state
         entity_id:
-          - cover.living_1
-          - cover.living_2
-          - cover.slaapkamer
+          - cover.screen_1
+          - cover.screen_2
+          - cover.screen_3
         to:
           - "opening"
           - "closing"

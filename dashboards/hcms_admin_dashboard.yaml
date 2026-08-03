@@ -152,11 +152,11 @@ views:
         title: Actuators — Current State
         icon: mdi:electric-switch
         entities:
-          - entity: cover.living_1
+          - entity: cover.screen_3
             name: Screen Living 1
-          - entity: cover.living_2
+          - entity: cover.screen_2
             name: Screen Living 2
-          - entity: cover.slaapkamer
+          - entity: cover.screen_1
             name: Screen Bedroom
           - type: divider
           - entity: fan.none_vmb4ry_ventilatie_sp2_ventilatie_sp2
@@ -276,13 +276,13 @@ views:
                 entity: weather.lanaken
                 state: unavailable
               - condition: state
-                entity: cover.living_1
+                entity: cover.screen_3
                 state: unavailable
               - condition: state
-                entity: cover.living_2
+                entity: cover.screen_2
                 state: unavailable
               - condition: state
-                entity: cover.slaapkamer
+                entity: cover.screen_1
                 state: unavailable
               - condition: state
                 entity: fan.none_vmb4ry_airco_airco
@@ -386,11 +386,11 @@ views:
         title: Entity Health — Actuators
         icon: mdi:electric-switch
         entities:
-          - entity: cover.living_1
+          - entity: cover.screen_3
             secondary_info: last-changed
-          - entity: cover.living_2
+          - entity: cover.screen_2
             secondary_info: last-changed
-          - entity: cover.slaapkamer
+          - entity: cover.screen_1
             secondary_info: last-changed
           - entity: fan.none_vmb4ry_ventilatie_sp2_ventilatie_sp2
             secondary_info: last-changed

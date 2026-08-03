@@ -147,11 +147,11 @@ views:
         title: Schermen
         icon: mdi:window-shutter
         entities:
-          - entity: cover.living_1
+          - entity: cover.screen_3
             name: Living midden
-          - entity: cover.living_2
+          - entity: cover.screen_2
             name: Living rechts
-          - entity: cover.slaapkamer
+          - entity: cover.screen_1
             name: Slaapkamer
 
       - type: grid
