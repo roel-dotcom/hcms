@@ -1,0 +1,71 @@
+################################################################################
+# Car — BMW iX3 (CarData integration)
+# Version: 0.1
+#
+# Notification automations built on the read-only BMW CarData telemetry
+# (integration: cardata, custom_components/cardata). CarData exposes no
+# remote-command service — these automations can only observe and notify,
+# never control the car.
+################################################################################
+
+input_number:
+  ix3_low_battery_threshold:
+    name: "iX3 Low Battery Threshold"
+    icon: mdi:battery-alert-variant-outline
+    unit_of_measurement: "%"
+    min: 5
+    max: 50
+    step: 5
+    mode: slider
+
+automation:
+  ############################################################################
+  # LOW BATTERY REMINDER
+  # Notifies when the car is parked at home, not charging, and its SoC is
+  # below the configured threshold. Multiple triggers cover both directions:
+  # SoC dropping while already parked (vampire drain) AND arriving home /
+  # stopping / charge session ending while already below threshold.
+  ############################################################################
+
+  - id: car_ix3_low_battery_reminder
+    alias: "iX3 — Low Battery Reminder"
+    description: >
+      Reminds you to plug in when the car is home, parked, not charging,
+      and battery is below input_number.ix3_low_battery_threshold.
+    mode: single
+    triggers:
+      - trigger: numeric_state
+        entity_id: sensor.ix3_m_sport_battery_ev_state_of_charge
+        below: input_number.ix3_low_battery_threshold
+        note: "Catches SoC dropping while already parked at home (vampire drain)."
+      - trigger: state
+        entity_id: device_tracker.ix3_m_sport_location
+        to: "home"
+        note: "Catches arriving home already below threshold."
+      - trigger: state
+        entity_id: binary_sensor.buiten_ix3_m_sport_vehicle_motion_state
+        to: "off"
+        note: "Catches stopping at home already below threshold."
+      - trigger: state
+        entity_id: sensor.ix3_m_sport_charging_ev_charging_state
+        to: "NOCHARGING"
+        note: "Catches a charge session ending below threshold."
+    conditions:
+      - condition: numeric_state
+        entity_id: sensor.ix3_m_sport_battery_ev_state_of_charge
+        below: input_number.ix3_low_battery_threshold
+      - condition: state
+        entity_id: device_tracker.ix3_m_sport_location
+        state: "home"
+      - condition: state
+        entity_id: binary_sensor.buiten_ix3_m_sport_vehicle_motion_state
+        state: "off"
+      - condition: state
+        entity_id: sensor.ix3_m_sport_charging_ev_charging_state
+        state: "NOCHARGING"
+    actions:
+      - action: notify.mobile_app_roels_iphone_15_pro_max
+        data:
+          title: "🔋 iX3 battery low"
+          message: >
+            {{ states('sensor.ix3_m_sport_battery_ev_state_of_charge') }}% remaining, parked at home and not charging. Plug it in?
