@@ -1,6 +1,9 @@
 ################################################################################
 # HCMS - Home Climate Management System
-# Version: 0.2
+# Version: 0.3
+#
+# 0.3: hcms_rain_detected now uses rain_rate only (event_rain accumulator
+#      stayed >0 for hours after rain stopped, blocking screen closing)
 #
 # Current Conditions Brain
 #
@@ -365,16 +368,17 @@ template:
 
       ######################################################################
       # Rain Detected
-      # Reuses your existing combined sensor.
+      # Rain rate only — event_rain is a cumulative "since last dry spell"
+      # counter that can sit above zero for hours after it actually stops
+      # raining, which blocked screen closing / forced screens open on
+      # sunny mornings after overnight rain. Rain rate reflects current
+      # conditions.
       ######################################################################
 
       - name: "HCMS Rain Detected"
         unique_id: hcms_rain_detected
         state: >
-          {{
-            states('sensor.ws3900a_rain_rate')|float(0) > 0
-            or states('sensor.ws3900a_event_rain')|float(0) > 0
-          }}
+          {{ states('sensor.ws3900a_rain_rate')|float(0) > 0 }}
 
       ######################################################################
       # Duct Fan Needed
