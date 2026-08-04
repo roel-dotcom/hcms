@@ -1,8 +1,15 @@
 ################################################################################
 # HCMS - Home Climate Management System
-# Version: 0.6
+# Version: 0.7
 #
 # Scripts — Reusable Device Control
+#
+# Changelog v0.7:
+#   - hcms_airco_on/off and hcms_ventilation_boost_on/off repointed from
+#     fan.none_vmb4ry_* entities (stale Velbus duplicate registrations —
+#     that naming scheme is no longer what the current bus scan produces)
+#     to their live switch.* equivalents. The old fan.* entities only ever
+#     supported on/off here anyway, so switch.turn_on/off is equivalent.
 #
 # Changelog v0.6:
 #   - Screens migrated from the HomeKit-relayed cover entities
@@ -159,9 +166,9 @@ script:
       - condition: state
         entity_id: input_boolean.hcms_ventilation_control
         state: "on"
-      - action: fan.turn_on
+      - action: switch.turn_on
         target:
-          entity_id: fan.none_vmb4ry_ventilatie_sp2_ventilatie_sp2
+          entity_id: switch.waskot_ventilatie_sp2_ventilatie_sp2
 
   hcms_ventilation_boost_off:
     alias: "HCMS Ventilation — Boost Off (Level 1)"
@@ -169,9 +176,9 @@ script:
     icon: mdi:fan-chevron-down
     mode: single
     sequence:
-      - action: fan.turn_off
+      - action: switch.turn_off
         target:
-          entity_id: fan.none_vmb4ry_ventilatie_sp2_ventilatie_sp2
+          entity_id: switch.waskot_ventilatie_sp2_ventilatie_sp2
 
   ############################################################################
   # AIRCO
@@ -194,9 +201,9 @@ script:
       - condition: state
         entity_id: binary_sensor.hcms_airco_permitted
         state: "on"
-      - action: fan.turn_on
+      - action: switch.turn_on
         target:
-          entity_id: fan.none_vmb4ry_airco_airco
+          entity_id: switch.living_airco_airco
       - delay:
           seconds: 30
       - action: fan.turn_on
@@ -214,9 +221,9 @@ script:
           entity_id: fan.r4_stopcontacten_vmb4ryld_airco_vent_airco_vent
       - delay:
           seconds: 10
-      - action: fan.turn_off
+      - action: switch.turn_off
         target:
-          entity_id: fan.none_vmb4ry_airco_airco
+          entity_id: switch.living_airco_airco
 
   ############################################################################
   # CEILING FAN

@@ -91,7 +91,7 @@ views:
         entities:
           - entity: sensor.hcms_climate_mode
             name: Climate Mode
-          - entity: fan.none_vmb4ry_airco_airco
+          - entity: switch.living_airco_airco
             name: Airco Fan
           - entity: fan.r4_stopcontacten_vmb4ryld_airco_vent_airco_vent
             name: Duct Fan (Bedroom)
@@ -299,7 +299,7 @@ views:
             name: Climate Mode
           - entity: sensor.hcms_cooling_priority
             name: Cooling Priority
-          - entity: fan.none_vmb4ry_ventilatie_sp2_ventilatie_sp2
+          - entity: switch.waskot_ventilatie_sp2_ventilatie_sp2
             name: Ventilation Fan
 
       - type: grid
@@ -499,7 +499,7 @@ views:
         cards:
 
           - type: tile
-            entity: fan.none_vmb4ry_airco_airco
+            entity: switch.living_airco_airco
             name: Airco
             icon: mdi:air-conditioner
             color: blue
@@ -520,7 +520,7 @@ views:
             vertical: true
 
           - type: tile
-            entity: fan.none_vmb4ry_ventilatie_sp2_ventilatie_sp2
+            entity: switch.waskot_ventilatie_sp2_ventilatie_sp2
             name: Ventilation Boost
             icon: mdi:fan
             color: cyan

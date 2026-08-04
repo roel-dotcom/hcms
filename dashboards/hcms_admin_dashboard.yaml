@@ -159,10 +159,10 @@ views:
           - entity: cover.screen_1
             name: Screen Bedroom
           - type: divider
-          - entity: fan.none_vmb4ry_ventilatie_sp2_ventilatie_sp2
+          - entity: switch.waskot_ventilatie_sp2_ventilatie_sp2
             name: Ventilation Fan
           - type: divider
-          - entity: fan.none_vmb4ry_airco_airco
+          - entity: switch.living_airco_airco
             name: Airco
           - entity: fan.r4_stopcontacten_vmb4ryld_airco_vent_airco_vent
             name: Duct Fan
@@ -285,10 +285,10 @@ views:
                 entity: cover.screen_1
                 state: unavailable
               - condition: state
-                entity: fan.none_vmb4ry_airco_airco
+                entity: switch.living_airco_airco
                 state: unavailable
               - condition: state
-                entity: fan.none_vmb4ry_ventilatie_sp2_ventilatie_sp2
+                entity: switch.waskot_ventilatie_sp2_ventilatie_sp2
                 state: unavailable
               - condition: state
                 entity: fan.create_wind_calm_local_tuya
@@ -392,9 +392,9 @@ views:
             secondary_info: last-changed
           - entity: cover.screen_1
             secondary_info: last-changed
-          - entity: fan.none_vmb4ry_ventilatie_sp2_ventilatie_sp2
+          - entity: switch.waskot_ventilatie_sp2_ventilatie_sp2
             secondary_info: last-changed
-          - entity: fan.none_vmb4ry_airco_airco
+          - entity: switch.living_airco_airco
             secondary_info: last-changed
           - entity: fan.r4_stopcontacten_vmb4ryld_airco_vent_airco_vent
             secondary_info: last-changed
