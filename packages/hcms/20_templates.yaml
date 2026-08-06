@@ -1,7 +1,10 @@
 ################################################################################
 # HCMS - Home Climate Management System
-# Version: 0.3
+# Version: 0.4
 #
+# 0.4: hcms_needs_cooling/heating switched from a single fixed threshold to
+#      real this.state-based hysteresis — indoor sensor jitter right at the
+#      threshold was cycling the airco on/off every 1-5 minutes
 # 0.3: hcms_rain_detected now uses rain_rate only (event_rain accumulator
 #      stayed >0 for hours after rain stopped, blocking screen closing)
 #
@@ -213,31 +216,42 @@ template:
 
       ######################################################################
       # Needs Cooling
-      # 0.3°C deadband above target to prevent rapid toggling.
+      # True hysteresis: turns on above target+0.3, stays on until back
+      # down to target. A single fixed threshold let the indoor sensor's
+      # own 0.1°C jitter flip this (and everything downstream, incl. the
+      # airco relay) every time it ticked past the line — was cycling the
+      # airco dozens of times/day. Uses this.state so the ON/OFF points
+      # differ (real deadband), not just an offset from target.
       ######################################################################
 
       - name: "HCMS Needs Cooling"
         unique_id: hcms_needs_cooling
         state: >
-          {{
-            states('sensor.hcms_indoor_temperature')|float(0)
-            >
-            states('input_number.hcms_target_temperature')|float(22) + 0.3
-          }}
+          {% set indoor = states('sensor.hcms_indoor_temperature')|float(0) %}
+          {% set target = states('input_number.hcms_target_temperature')|float(22) %}
+          {% if this.state == 'on' %}
+            {{ indoor > target }}
+          {% else %}
+            {{ indoor > target + 0.3 }}
+          {% endif %}
 
       ######################################################################
       # Needs Heating
-      # 0.5°C below target — asymmetric deadband (we tolerate cool better).
+      # Same hysteresis fix as Needs Cooling above — was a single fixed
+      # threshold (target - 0.5), vulnerable to the identical short-cycling
+      # bug once indoor temp sits near that line.
       ######################################################################
 
       - name: "HCMS Needs Heating"
         unique_id: hcms_needs_heating
         state: >
-          {{
-            states('sensor.hcms_indoor_temperature')|float(0)
-            <
-            states('input_number.hcms_target_temperature')|float(22) - 0.5
-          }}
+          {% set indoor = states('sensor.hcms_indoor_temperature')|float(0) %}
+          {% set target = states('input_number.hcms_target_temperature')|float(22) %}
+          {% if this.state == 'on' %}
+            {{ indoor < target }}
+          {% else %}
+            {{ indoor < target - 0.5 }}
+          {% endif %}
 
       ######################################################################
       # Solar Surplus
