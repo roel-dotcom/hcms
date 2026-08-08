@@ -1,8 +1,22 @@
 ################################################################################
 # HCMS - Home Climate Management System
-# Version: 0.7
+# Version: 0.8
 #
 # Scripts — Reusable Device Control
+#
+# Changelog v0.8:
+#   - hcms_screens_open now respects screens_manual_override (previously the
+#     override only blocked auto-CLOSE; auto-OPEN ignored it, so a manually
+#     closed screen re-opened on the next mode change / periodic check).
+#     Storm/rain still force-open via hcms_screens_open_override_immune.
+#   - hcms_screens_open/close are now idempotent: they skip (no cover command,
+#     no timestamp) when the screens are already at the target position, so
+#     the 15-min periodic check no longer re-commands the motors or churns
+#     input_datetime.last_screen_automation every cycle (fixes the "last
+#     open/close time is always ~now" issue).
+#   - hcms_screens_open excludes the bedroom (cover.screen_1) during
+#     NIGHT_FLUSH — living screens open for night ventilation, bedroom stays
+#     as-is so it isn't auto-opened while sleeping.
 #
 # Changelog v0.7:
 #   - hcms_airco_on/off and hcms_ventilation_boost_on/off repointed from
@@ -66,6 +80,11 @@ script:
       - condition: state
         entity_id: input_boolean.hcms_screen_control
         state: "on"
+      - condition: template
+        value_template: >
+          {% set target = states('sensor.hcms_screen_target_position')|int(0) %}
+          {{ ['cover.screen_1', 'cover.screen_2', 'cover.screen_3']
+             | map('state_attr', 'current_position') | map('int', 0) | max > target }}
       - action: input_boolean.turn_on
         target:
           entity_id: input_boolean.hcms_screen_moving
@@ -91,26 +110,39 @@ script:
   hcms_screens_open:
     alias: "HCMS Screens — Open All"
     description: >
-      Opens all three screens as a group.
-      Sets hcms_screen_moving for 45s to prevent false override detection.
+      Opens the screens as a group — all three normally, but living-only
+      (screen_2/screen_3) during NIGHT_FLUSH so the bedroom isn't auto-opened
+      at night. Respects screens_manual_override; idempotent (skips if already
+      open). Sets hcms_screen_moving for 45s to prevent false override detection.
     icon: mdi:window-shutter-open
     mode: single
     sequence:
+      - variables:
+          # Bedroom (screen_1) is excluded during NIGHT_FLUSH: the house vents
+          # with the living screens open, but the bedroom is left as-is so it
+          # isn't auto-opened while someone's sleeping. All three otherwise.
+          open_screens: >-
+            {{ ['cover.screen_2', 'cover.screen_3']
+               if states('sensor.hcms_climate_mode') == 'NIGHT_FLUSH'
+               else ['cover.screen_1', 'cover.screen_2', 'cover.screen_3'] }}
       - condition: state
         entity_id: input_boolean.hcms_enabled
         state: "on"
       - condition: state
         entity_id: input_boolean.hcms_screen_control
         state: "on"
+      - condition: state
+        entity_id: input_boolean.screens_manual_override
+        state: "off"
+      - condition: template
+        value_template: >
+          {{ open_screens | map('state_attr', 'current_position') | map('int', 0) | min < 100 }}
       - action: input_boolean.turn_on
         target:
           entity_id: input_boolean.hcms_screen_moving
       - action: cover.open_cover
         target:
-          entity_id:
-            - cover.screen_1
-            - cover.screen_2
-            - cover.screen_3
+          entity_id: "{{ open_screens }}"
       - action: input_datetime.set_datetime
         target:
           entity_id: input_datetime.last_screen_automation
@@ -311,7 +343,8 @@ script:
     alias: "HCMS Activate Free Cooling"
     description: >
       Ventilation boost on. Airco off. Screens per recommendation.
-      Override blocks closing only — opening still works.
+      Manual override blocks both auto-open and auto-close (enforced inside
+      hcms_screens_open/close). Storm/rain use the override-immune open.
     icon: mdi:fan-auto
     mode: single
     sequence:
