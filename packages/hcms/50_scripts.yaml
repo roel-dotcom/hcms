@@ -14,9 +14,9 @@
 #     the 15-min periodic check no longer re-commands the motors or churns
 #     input_datetime.last_screen_automation every cycle (fixes the "last
 #     open/close time is always ~now" issue).
-#   - hcms_screens_open excludes the bedroom (cover.screen_1) during
-#     NIGHT_FLUSH — living screens open for night ventilation, bedroom stays
-#     as-is so it isn't auto-opened while sleeping.
+#   - NIGHT_FLUSH no longer moves screens at all — night flushing is handled
+#     by the mechanical ventilation boost. Enforced upstream via the screen
+#     recommendation (HOLD during NIGHT_FLUSH) in 40_strategy.yaml.
 #
 # Changelog v0.7:
 #   - hcms_airco_on/off and hcms_ventilation_boost_on/off repointed from
@@ -110,21 +110,14 @@ script:
   hcms_screens_open:
     alias: "HCMS Screens — Open All"
     description: >
-      Opens the screens as a group — all three normally, but living-only
-      (screen_2/screen_3) during NIGHT_FLUSH so the bedroom isn't auto-opened
-      at night. Respects screens_manual_override; idempotent (skips if already
-      open). Sets hcms_screen_moving for 45s to prevent false override detection.
+      Opens all three screens as a group. Respects screens_manual_override;
+      idempotent (skips the command + timestamp if already open). Night flush
+      does not open screens at all — the recommendation is HOLD during
+      NIGHT_FLUSH (see 40_strategy), so this is never called then.
+      Sets hcms_screen_moving for 45s to prevent false override detection.
     icon: mdi:window-shutter-open
     mode: single
     sequence:
-      - variables:
-          # Bedroom (screen_1) is excluded during NIGHT_FLUSH: the house vents
-          # with the living screens open, but the bedroom is left as-is so it
-          # isn't auto-opened while someone's sleeping. All three otherwise.
-          open_screens: >-
-            {{ ['cover.screen_2', 'cover.screen_3']
-               if states('sensor.hcms_climate_mode') == 'NIGHT_FLUSH'
-               else ['cover.screen_1', 'cover.screen_2', 'cover.screen_3'] }}
       - condition: state
         entity_id: input_boolean.hcms_enabled
         state: "on"
@@ -136,13 +129,17 @@ script:
         state: "off"
       - condition: template
         value_template: >
-          {{ open_screens | map('state_attr', 'current_position') | map('int', 0) | min < 100 }}
+          {{ ['cover.screen_1', 'cover.screen_2', 'cover.screen_3']
+             | map('state_attr', 'current_position') | map('int', 0) | min < 100 }}
       - action: input_boolean.turn_on
         target:
           entity_id: input_boolean.hcms_screen_moving
       - action: cover.open_cover
         target:
-          entity_id: "{{ open_screens }}"
+          entity_id:
+            - cover.screen_1
+            - cover.screen_2
+            - cover.screen_3
       - action: input_datetime.set_datetime
         target:
           entity_id: input_datetime.last_screen_automation

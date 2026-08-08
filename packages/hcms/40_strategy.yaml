@@ -1,6 +1,10 @@
 ################################################################################
 # HCMS - Home Climate Management System
-# Version: 0.3
+# Version: 0.4
+#
+# 0.4: hcms_screen_recommendation now returns HOLD during NIGHT_FLUSH — night
+#      flushing is done by the mechanical ventilation boost, not by moving the
+#      screens. Screens are left untouched at night.
 #
 # Climate Strategy Engine
 #
@@ -153,6 +157,8 @@ template:
             OPEN
           {% elif mode == 'WINTER_PASSIVE' %}
             OPEN
+          {% elif mode == 'NIGHT_FLUSH' %}
+            HOLD
           {% elif should_close and not should_open %}
             CLOSE
           {% elif should_open %}
