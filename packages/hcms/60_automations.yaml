@@ -444,52 +444,52 @@ automation:
         target:
           entity_id: input_number.hcms_fc_today_max
         data:
-          value: "{{ fc['weather.lanaken'].forecast[0].temperature | float(0) }}"
+          value: "{{ fc['weather.lanaken'].forecast[0].temperature | float(states('input_number.hcms_fc_today_max')|float(0)) }}"
       - action: input_number.set_value
         target:
           entity_id: input_number.hcms_fc_today_min
         data:
-          value: "{{ fc['weather.lanaken'].forecast[0].templow | float(0) }}"
+          value: "{{ fc['weather.lanaken'].forecast[0].templow | float(states('input_number.hcms_fc_today_min')|float(0)) }}"
       - action: input_number.set_value
         target:
           entity_id: input_number.hcms_fc_today_precip
         data:
-          value: "{{ fc['weather.lanaken'].forecast[0].precipitation_probability | int(0) }}"
+          value: "{{ fc['weather.lanaken'].forecast[0].precipitation_probability | int(states('input_number.hcms_fc_today_precip')|int(0)) }}"
       - action: input_text.set_value
         target:
           entity_id: input_text.hcms_fc_today_condition
         data:
-          value: "{{ fc['weather.lanaken'].forecast[0].condition | string }}"
+          value: "{{ fc['weather.lanaken'].forecast[0].condition or states('input_text.hcms_fc_today_condition') }}"
       - action: input_number.set_value
         target:
           entity_id: input_number.hcms_fc_tomorrow_max
         data:
-          value: "{{ fc['weather.lanaken'].forecast[1].temperature | float(0) }}"
+          value: "{{ fc['weather.lanaken'].forecast[1].temperature | float(states('input_number.hcms_fc_tomorrow_max')|float(0)) }}"
       - action: input_number.set_value
         target:
           entity_id: input_number.hcms_fc_tomorrow_min
         data:
-          value: "{{ fc['weather.lanaken'].forecast[1].templow | float(0) }}"
+          value: "{{ fc['weather.lanaken'].forecast[1].templow | float(states('input_number.hcms_fc_tomorrow_min')|float(0)) }}"
       - action: input_number.set_value
         target:
           entity_id: input_number.hcms_fc_tomorrow_precip
         data:
-          value: "{{ fc['weather.lanaken'].forecast[1].precipitation_probability | int(0) }}"
+          value: "{{ fc['weather.lanaken'].forecast[1].precipitation_probability | int(states('input_number.hcms_fc_tomorrow_precip')|int(0)) }}"
       - action: input_number.set_value
         target:
           entity_id: input_number.hcms_fc_night_low
         data:
-          value: "{{ fc['weather.lanaken'].forecast[1].templow | float(0) }}"
+          value: "{{ fc['weather.lanaken'].forecast[1].templow | float(states('input_number.hcms_fc_night_low')|float(0)) }}"
       - action: input_text.set_value
         target:
           entity_id: input_text.hcms_fc_tomorrow_condition
         data:
-          value: "{{ fc['weather.lanaken'].forecast[1].condition | string }}"
+          value: "{{ fc['weather.lanaken'].forecast[1].condition or states('input_text.hcms_fc_tomorrow_condition') }}"
       - action: input_text.set_value
         target:
           entity_id: input_text.hcms_fc_tomorrow_condition_2
         data:
-          value: "{{ fc['weather.lanaken'].forecast[1].condition_2 | string }}"
+          value: "{{ fc['weather.lanaken'].forecast[1].condition_2 or states('input_text.hcms_fc_tomorrow_condition_2') }}"
       - action: input_datetime.set_datetime
         target:
           entity_id: input_datetime.hcms_forecast_updated
