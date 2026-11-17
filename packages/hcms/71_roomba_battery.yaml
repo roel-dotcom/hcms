@@ -1,0 +1,38 @@
+################################################################################
+# HCMS - Home Climate Management System
+# Version: 0.1
+#
+# Roomba (Gerda 2.0) — charge cycles of the CURRENT battery
+#
+# The robot's own counter (sensor.gerda_2_0_battery_cycles) is a lifetime
+# counter that keeps counting across battery swaps. After fitting a new battery
+# we remember the counter value at swap time and show the difference.
+#
+# On the next battery swap: set input_number.hcms_roomba_battery_cycles_offset
+# to the current value of sensor.gerda_2_0_battery_cycles.
+#
+# Note: `initial:` is deliberately not used (see 10_helpers.yaml v0.6 — it
+# blocks RestoreEntity). Set the offset once through the UI or a service call.
+################################################################################
+
+input_number:
+  hcms_roomba_battery_cycles_offset:
+    name: "Roomba battery cycles at last swap"
+    icon: mdi:battery-sync
+    min: 0
+    max: 5000
+    step: 1
+    mode: box
+
+template:
+  - sensor:
+      - name: "New battery cycles"
+        unique_id: hcms_roomba_new_battery_cycles
+        icon: mdi:battery-sync
+        state_class: measurement
+        availability: >
+          {{ states('sensor.gerda_2_0_battery_cycles') | is_number
+             and states('input_number.hcms_roomba_battery_cycles_offset') | is_number }}
+        state: >
+          {{ [ states('sensor.gerda_2_0_battery_cycles') | int
+               - states('input_number.hcms_roomba_battery_cycles_offset') | int, 0 ] | max }}

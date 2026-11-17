@@ -1,0 +1,82 @@
+################################################################################
+# HCMS - Home Climate Management System
+# Version: 0.1
+#
+# Yiko (Ecovacs Deebot X12) — clean on solar surplus
+#
+# The robot's own battery charge is tiny and happens on the dock, so there is
+# nothing to defer there. What draws real power is cleaning plus the station's
+# mop wash and heated mop drying afterwards. This starts one clean per day when
+# the house has been exporting power for a while.
+#
+# Uses its OWN threshold (hcms_vacuum_surplus_threshold). The existing
+# hcms_solar_surplus_threshold (airco pre-cool, ~1900 W) is far too high for a
+# vacuum and would almost never trigger in winter.
+#
+# Notes:
+#   - Needs no extra helpers state to restore: `initial:` is deliberately not
+#     used (see 10_helpers.yaml v0.6 — it blocks RestoreEntity).
+#   - Once started the robot finishes its job regardless of surplus.
+################################################################################
+
+input_boolean:
+  hcms_vacuum_solar_enabled:
+    name: "HCMS Vacuum on Solar Surplus"
+    icon: mdi:robot-vacuum
+
+input_number:
+  hcms_vacuum_surplus_threshold:
+    name: "HCMS Vacuum Surplus Threshold"
+    icon: mdi:solar-power
+    min: 100
+    max: 2000
+    step: 50
+    unit_of_measurement: "W"
+
+input_datetime:
+  hcms_vacuum_last_solar_run:
+    name: "HCMS Vacuum Last Solar Run"
+    has_date: true
+    has_time: true
+
+automation:
+
+  - id: hcms_vacuum_solar_start
+    alias: "HCMS Vacuum — Clean on Solar Surplus"
+    description: >
+      Starts Yiko once per day when net export has stayed above the vacuum
+      surplus threshold for 5 minutes, between 09:00 and 17:00, while the
+      robot is docked and charged.
+    mode: single
+    triggers:
+      - trigger: numeric_state
+        entity_id: sensor.hcms_net_power_balance
+        above: input_number.hcms_vacuum_surplus_threshold
+        for: "00:05:00"
+    conditions:
+      - condition: state
+        entity_id: input_boolean.hcms_vacuum_solar_enabled
+        state: "on"
+      - condition: time
+        after: "09:00:00"
+        before: "17:00:00"
+      - condition: state
+        entity_id: vacuum.hall_beneden_yiko
+        state: "docked"
+      - condition: numeric_state
+        entity_id: sensor.hall_beneden_yiko_battery
+        above: 79
+      - condition: template
+        alias: "Not already started today"
+        value_template: >
+          {{ states('input_datetime.hcms_vacuum_last_solar_run')[:10]
+             != now().strftime('%Y-%m-%d') }}
+    actions:
+      - action: input_datetime.set_datetime
+        target:
+          entity_id: input_datetime.hcms_vacuum_last_solar_run
+        data:
+          datetime: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }}"
+      - action: vacuum.start
+        target:
+          entity_id: vacuum.hall_beneden_yiko
